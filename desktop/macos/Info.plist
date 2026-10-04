@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+    <!-- 主程序文件名，必须与 Contents/MacOS/GridPlanner 完全一致。 -->
+    <key>CFBundleExecutable</key><string>GridPlanner</string>
+    <!-- 本地应用标识，用于 LaunchServices 和独立应用偏好命名。 -->
+    <key>CFBundleIdentifier</key><string>local.gridplanner.menu</string>
+    <!-- 应用包的英文名称，ZIP 解压后保留完整的 Grid Planner.app 目录。 -->
+    <key>CFBundleName</key><string>Grid Planner</string>
+    <!-- 面向用户的中文显示名。 -->
+    <key>CFBundleDisplayName</key><string>网格交易助手</string>
+    <!-- APPL 表示可启动的 macOS 应用包，不是普通资源目录。 -->
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <!-- 用户可见功能版本；发布新版本时与 Cargo.toml 保持一致。 -->
+    <key>CFBundleShortVersionString</key><string>0.2.0</string>
+    <!-- 内部构建版本号；重新发布时递增，便于系统区分包版本。 -->
+    <key>CFBundleVersion</key><string>2</string>
+    <!-- 最低系统声明；脚本中的 Rust 与 Swift 部署目标同为 macOS 13。 -->
+    <key>LSMinimumSystemVersion</key><string>13.0</string>
+    <!-- 菜单栏辅助应用：不显示普通 Dock 图标，关闭窗口后仍继续运行。 -->
+    <key>LSUIElement</key><true/>
+    <!-- 使用原生 Retina/高分辨率渲染。 -->
+    <key>NSHighResolutionCapable</key><true/>
+    <!-- 系统应用分类；只影响描述，不授予交易或账户权限。 -->
+    <key>LSApplicationCategoryType</key><string>public.app-category.finance</string>
+</dict></plist>

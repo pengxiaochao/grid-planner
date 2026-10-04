@@ -1,0 +1,23 @@
+# 使用真实币安已收盘行情：cargo run --locked -- --config examples/atr.toml --live
+# 最多允许投入的 USDT，程序仍会根据账户风险缩小实际投入。
+capital = 600.0
+# 账户总资产，单位 USDT；未填时默认等于 capital。
+equity = 600.0
+# 公开现货交易对，所有查询无需 API Key。
+symbol = "BTCUSDT"
+# 用历史波幅计算区间；必须加 --live 获取 OHLC，不读取本地演示行情。
+mode = "atr"
+# 每根 K 线为一日，Binance 默认使用 UTC 边界。
+interval = "1d"
+# 希望请求最近 180 根已收盘 K 线；返回较少时会如实提示。
+history_bars = 180
+# Wilder ATR 使用 14 个 TR 初始化，再递推平滑；至少需要 15 根样本。
+atr_period = 14
+# 下限/上限各距公开现价 3 倍 ATR，倍数不是未来概率保证。
+range_atr_mult = 3.0
+# SL 从区间下限再减 1.5 倍 ATR。
+stop_atr_mult = 1.5
+# TP 从区间上限再加 1.5 倍 ATR，含义是停止机器人。
+take_atr_mult = 1.5
+# 止损情景预算占账户资产 2%，据此反推每格数量及投入。
+risk_pct = 2.0

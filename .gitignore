@@ -1,0 +1,9 @@
+# 编译缓存与打包结果只保留在本机，不上传到源码仓库。
+/target/
+/plan.json
+/plan.txt
+/dist/
+.DS_Store
+
+# 此项目发布可执行程序，必须提交锁文件；覆盖个人全局忽略 Cargo.lock 的设置。
+!/Cargo.lock

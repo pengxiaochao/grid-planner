@@ -1,0 +1,34 @@
+# 应用元信息；版本会进入 CLI --version，桌面版本另在 Info.plist 中维护。
+[package]
+# Rust 后端二进制名；桌面脚本按 grid-planner 复制到 .app 的 Resources。
+name = "grid-planner"
+# 应用功能版本，修改时同步 Cargo.lock 与桌面 Info.plist。
+version = "0.2.0"
+# 使用 Rust 2024 语言版本，需要至少支持该 edition 的工具链。
+edition = "2024"
+# 编译器最低声明，不等于已验证每个依赖都能在此版本运行；CI 使用 stable。
+rust-version = "1.85"
+# 包描述与授权方式，不影响交易计算。
+description = "面向币安 USDT 现货网格的参数与风险预算生成器"
+license = "MIT"
+
+# 生产依赖的精确解析版本由 Cargo.lock 保存，构建必须加 --locked。
+[dependencies]
+# 为输入、网络、文件及数学校验错误保留中文上下文链。
+anyhow = "1.0.103"
+# 用字段属性生成 CLI 参数及帮助，避免手工解析命令行。
+clap = { version = "4.6.6", features = ["derive"] }
+# 后台子进程内使用阻塞公开 HTTP；支持 JSON、Rust TLS 和 HTTP/SOCKS 代理。
+# 关闭默认功能以避免依赖系统 OpenSSL；此客户端不会调用账户或交易接口。
+reqwest = { version = "0.12.28", default-features = false, features = ["blocking", "json", "rustls-tls", "socks"] }
+# 配置反序列化与结果序列化共享派生定义。
+serde = { version = "1.0.228", features = ["derive"] }
+# JSON 用于公开 API 解析及桌面桥接结果导出。
+serde_json = "1.0.150"
+# TOML 用于可读的用户配置文件，不作为行情数据来源。
+toml = "0.9.12"
+
+# 验收依赖仅进入测试，不随生产后端链接。
+[dev-dependencies]
+# 自动清理 E2E 用例的临时 CSV、配置及 JSON，避免碰到用户文件。
+tempfile = "3.27.0"
