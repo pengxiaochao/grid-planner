@@ -23,8 +23,10 @@ struct BridgeE2E {
         try partialHistory(engine, api)
         try invalidHistory(engine, api)
         try adaptive(engine, api)
+        try arithmetic(engine)
+        try adaptiveArithmetic(engine, api)
         try oldDraft()
-        print("desktop bridge E2E: 13 passed（表单 → 真实子进程 → HTTP/JSON → 显示/复制数据）")
+        print("desktop bridge E2E: 15 passed（表单 → 真实子进程 → HTTP/JSON → 显示/复制数据）")
     }
 
     /// 输入：无；返回：明确的离线示例表单，不保存或读取用户偏好。
@@ -203,11 +205,42 @@ struct BridgeE2E {
         }
     }
 
+    /// 输入：包内后端；返回：无；等差选择经表单传参，显示/复制和导出的价位及类型一致。
+    private static func arithmetic(_ engine: URL) throws {
+        var form = draft()
+        form.range = .manual
+        for (field, value) in [("grid-mode", "arithmetic"), ("lower", "400"), ("upper", "450"),
+                               ("price", "425"), ("equity", "30000"), ("grids", "5"), ("step-size", "0.001")] {
+            form.values[field] = value
+        }
+        let result = try calculate(form, engine)
+        let json = try JSONSerialization.jsonObject(with: result.json) as! [String: Any]
+        try check(json["mode"] as? String == "arithmetic", "表单等差类型未传入后端")
+        try check(result.plan.gridPrices == ["400.00", "410.00", "420.00", "430.00", "440.00", "450.00"], "等差价位不正确")
+        try check(result.plan.copyText().contains("现货等差网格"), "复制文本未保留等差类型")
+        try check((json["grid_count_reason"] as? String)?.contains("用户指定") == true, "缺少固定格数原因")
+    }
+
+    /// 输入：包内后端和测试 API；返回：无；真实历史自适应等差仍保留成本审计并支持超过五格。
+    private static func adaptiveArithmetic(_ engine: URL, _ api: String) throws {
+        var form = FormState()
+        for (field, value) in [("grid-mode", "arithmetic"), ("capital", "3000"), ("equity", "15000"),
+                               ("max-grids", "24"), ("min-order-usdt", "10"), ("grids", "6")] {
+            form.values[field] = value
+        }
+        let result = try EngineRunner(executable: engine).execute(arguments: form.arguments() + ["--api-base-url", api + "/adaptive"])
+        let json = try JSONSerialization.jsonObject(with: result.json) as! [String: Any]
+        try check(json["mode"] as? String == "arithmetic", "自适应使用了错误网格类型")
+        try check(result.plan.gridCount == 6 && result.plan.optimization?.holdout.evaluatedBars == 36, "固定格数或最终检验异常")
+        try check(result.plan.copyText().contains("等差") || !result.plan.isActionable, "可执行复制缺少等差类型")
+    }
+
     /// 输入：无；返回：无；旧版表单 JSON 缺少算法字段时补默认值，不丢其他设置。
     private static func oldDraft() throws {
         let data = Data("{\"live\":true,\"range\":\"atr\",\"useProxy\":false,\"proxy\":\"http\",\"values\":{\"capital\":\"321\"}}".utf8)
         let form = try JSONDecoder().decode(FormState.self, from: data)
         try check(form.value(.capital) == "321", "升级丢失旧资金设置")
         try check(form.arguments().contains("adaptive"), "旧草稿没有自适应默认值")
+        try check(form.arguments().contains("--grid-mode") && form.arguments().contains("geometric"), "旧草稿没有补等比默认值")
     }
 }

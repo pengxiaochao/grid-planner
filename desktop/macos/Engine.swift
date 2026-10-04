@@ -13,6 +13,8 @@ struct AppFailure: LocalizedError, Sendable {
 /// Rust Plan JSON 的桌面展示模型，snake_case 由解码器映射为 camelCase。
 /// 只解码界面需要的字段；精确价格/数量仍保留字符串，避免重新计算改变结果。
 struct PlanData: Decodable, Sendable {
+    /// geometric 等比 / arithmetic 等差，与后端及导出 JSON 的 mode 一致。
+    let mode: String
     /// classic/adaptive；可选字段保持与旧后端导出兼容。
     let algorithm: String?
     /// 自适应历史证据与观望判定，经典模式为 nil。
@@ -31,6 +33,8 @@ struct PlanData: Decodable, Sendable {
     let takeProfit: String
     /// 网格段数 N，对应 gridPrices 中 N+1 个价格点。
     let gridCount: Int
+    /// 后端给出的固定/自动格数选择原因；旧后端缺失时使用兼容说明。
+    let gridCountReason: String?
     /// 每格统一基础币数量字符串，已满足 stepSize。
     let quantityPerGrid: String
     /// 从下到上排列的精确价格点，复制和明细展示复用同一数组。
@@ -67,15 +71,24 @@ struct PlanData: Decodable, Sendable {
     /// 输入：后端算法判定；返回：是否通过历史门槛、可以复制填写参数。
     var isActionable: Bool { optimization?.recommendation != "wait" }
 
+    /// 输入：后端网格类型；返回：供界面和复制文本共用的中文名称。
+    var gridModeTitle: String { mode == "arithmetic" ? "等差" : "等比" }
+
+    /// 输入：可选后端说明；返回：格数选择原因，旧版结果也不把格数描述为收益保证。
+    var gridCountExplanation: String {
+        gridCountReason ?? "格数还受区间、交易成本、单笔金额与风险约束；更多格数不保证更高总收益。"
+    }
+
     /// 输入：方案；返回：方便抄到币安的中文文本，风险信息与关键参数一起保留。
     func copyText() -> String {
         if !isActionable { return "建议观望：\(optimization?.reason ?? "证据不足")\n\(validationText())" }
         return """
-        \(symbol) 现货等比网格
+        \(symbol) 现货\(gridModeTitle)网格
         参考现价：\(referencePrice) USDT
         下限：\(lowerPrice)
         上限：\(upperPrice)
         网格数量：\(gridCount)
+        格数选择原因：\(gridCountExplanation)
         投入金额：\(money(investmentUsdt)) USDT
         止损 SL：\(stopLoss)
         停止价 TP：\(takeProfit)
@@ -102,6 +115,8 @@ struct OptimizationData: Decodable, Sendable {
     let selectedRangeAtrMult: Double
     /// 实际历史可行的候选组合数。
     let feasibleCandidates: Int
+    /// 实际搜索的区间/格数组合总数，用于区分最优格数和搜索上限。
+    let testedCandidates: Int
     /// 扣除回撤、波动及成本压力后的发展段评分。
     let developmentScore: Double
     /// 旧策略同口径评分，不可行时为空。

@@ -349,6 +349,12 @@ pub fn generate(s: &Settings, market: Market) -> Result<Plan> {
     let mut plan = crate::planner::generate(&selected, market)
         .context("自适应选定政策在当前行情下不可行；不会使用最终检验重新调参")?;
     plan.algorithm = Algorithm::Adaptive;
+    if s.grids.is_none() {
+        plan.grid_count_reason = format!(
+            "在 {tested} 个区间/格数组合中，以发展段风险调整评分选择 {} 格；资金增加主要影响每格数量，不保证改变最佳格数。",
+            plan.grid_count
+        );
+    }
     if report.recommendation == "wait" {
         plan.warnings.insert(
             0,

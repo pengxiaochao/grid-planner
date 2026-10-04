@@ -9,6 +9,8 @@ equity = 600.0
 symbol = "BTCUSDT"
 # percent 按现价百分比展开；也支持 atr / manual，但必填参数不同。
 mode = "percent"
+# geometric 等比 / arithmetic 等差；旧配置缺少字段时仍使用等比。
+grid_mode = "geometric"
 
 # 这里的 2、0.1 均是百分比数值，而不是已经除以 100 的比例。
 # 止损情景预算为账户资产的 2%；跳空等实际执行损失仍可能更大。

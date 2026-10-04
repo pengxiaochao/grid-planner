@@ -20,10 +20,24 @@ pub fn text_report(p: &Plan, levels: bool) -> Result<String> {
             o.reason
         )?;
     }
+    append_parameters(&mut text, p)?;
+    append_estimates(&mut text, p)?;
+    append_levels(&mut text, p, levels)?;
+    writeln!(text, "\n计算边界：")?;
+    for warning in &p.warnings {
+        writeln!(text, "- {warning}")?;
+    }
+    Ok(text)
+}
+
+/// 输入：报告缓冲和方案；返回：写入成功或格式化错误；类型、格数解释及填写参数保持一致。
+fn append_parameters(text: &mut String, p: &Plan) -> Result<()> {
     writeln!(
         text,
-        "模式：等比网格；区间模型：{}；参考价：{} USDT",
-        p.range_model, p.reference_price
+        "模式：{}网格；区间模型：{}；参考价：{} USDT",
+        p.mode.title(),
+        p.range_model,
+        p.reference_price
     )?;
     writeln!(
         text,
@@ -36,6 +50,7 @@ pub fn text_report(p: &Plan, levels: bool) -> Result<String> {
         p.grid_count,
         p.grid_prices.len()
     )?;
+    writeln!(text, "格数选择原因：{}", p.grid_count_reason)?;
     writeln!(
         text,
         "投入金额：{:.2} USDT（最多可投入 {:.2}；未分配 {:.2}）",
@@ -47,13 +62,7 @@ pub fn text_report(p: &Plan, levels: bool) -> Result<String> {
         p.stop_loss, p.take_profit
     )?;
     writeln!(text, "高级设置：停止时卖出全部基础币 = 开启")?;
-    append_estimates(&mut text, p)?;
-    append_levels(&mut text, p, levels)?;
-    writeln!(text, "\n计算边界：")?;
-    for warning in &p.warnings {
-        writeln!(text, "- {warning}")?;
-    }
-    Ok(text)
+    Ok(())
 }
 
 /// 输入：报告缓冲、方案及是否展开；返回：无；保持 N+1 个价格点的原始精度。

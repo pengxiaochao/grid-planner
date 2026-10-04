@@ -124,6 +124,181 @@ fn fee_formula_matches_binance_geometric_example() {
     check_invariants(&p);
 }
 
+/// 输入：无；返回：无；默认类型保持等比，显式指定不改变既有方案。
+#[test]
+fn grid_mode_default_remains_geometric() {
+    let old = plan(&[]);
+    let explicit = plan(&["--grid-mode", "geometric"]);
+    assert_eq!(old, explicit);
+    assert_eq!(old["mode"], "geometric");
+    assert!(
+        old["grid_count_reason"]
+            .as_str()
+            .unwrap()
+            .contains("最多可行")
+    );
+}
+
+/// 输入：无；返回：无；用公开等差示例独立核验价位、最差收益及资金会计。
+#[test]
+fn grid_mode_arithmetic_prices_and_costs_are_consistent() {
+    let p = plan(&[
+        "--grid-mode",
+        "arithmetic",
+        "--mode",
+        "manual",
+        "--lower",
+        "400",
+        "--upper",
+        "450",
+        "--price",
+        "425",
+        "--equity",
+        "30000",
+        "--grids",
+        "5",
+        "--fee-pct",
+        "0.1",
+        "--slippage-pct",
+        "0",
+        "--step-size",
+        "0.001",
+    ]);
+    assert_eq!(p["mode"], "arithmetic");
+    assert_eq!(
+        p["grid_prices"],
+        json!(["400.00", "410.00", "420.00", "430.00", "440.00", "450.00"])
+    );
+    let expected = ((1.0 - 0.001) * 450.0 / 440.0 - 1.0 - 0.001) * 100.0;
+    assert!((p["worst_net_grid_pct"].as_f64().unwrap() - expected).abs() < 1e-8);
+    assert!(
+        p["grid_count_reason"]
+            .as_str()
+            .unwrap()
+            .contains("用户指定")
+    );
+    check_invariants(&p);
+}
+
+/// 输入：无；返回：无；等差价位取整后保留合法端点，并重新验证最差一格及资金。
+#[test]
+fn grid_mode_arithmetic_rechecks_rounded_prices() {
+    let p = plan(&[
+        "--grid-mode",
+        "arithmetic",
+        "--mode",
+        "manual",
+        "--lower",
+        "400.03",
+        "--upper",
+        "450.08",
+        "--price",
+        "425",
+        "--equity",
+        "30000",
+        "--grids",
+        "5",
+        "--tick-size",
+        "0.1",
+        "--step-size",
+        "0.001",
+    ]);
+    assert_eq!(p["lower_price"], "400.0");
+    assert_eq!(p["upper_price"], "450.1");
+    assert_eq!(p["grid_prices"].as_array().unwrap().len(), 6);
+    check_invariants(&p);
+}
+
+/// 输入：无；返回：无；截图区间可生成超过五格，两种类型均受成本而非固定五格限制。
+#[test]
+fn grid_mode_more_capital_does_not_remove_cost_threshold() {
+    for mode in ["geometric", "arithmetic"] {
+        for capital in ["600", "66000"] {
+            let p = plan(&[
+                "--grid-mode",
+                mode,
+                "--mode",
+                "manual",
+                "--lower",
+                "81993.21",
+                "--upper",
+                "88606.77",
+                "--price",
+                "85300",
+                "--capital",
+                capital,
+                "--risk-pct",
+                "100",
+            ]);
+            assert_eq!(p["grid_count"], 12);
+            check_invariants(&p);
+        }
+    }
+}
+
+/// 输入：无；返回：无；非法类型、重叠价位和低于净收益门槛的固定值均拒绝。
+#[test]
+fn grid_mode_rejects_invalid_or_infeasible_requests() {
+    let cases = [
+        ("--grid-mode unknown", "invalid value"),
+        (
+            "--grid-mode arithmetic --mode manual --lower 400 --upper 450 --price 425 --grids 20 --tick-size 10",
+            "重叠",
+        ),
+        (
+            "--grid-mode arithmetic --mode manual --lower 81993.21 --upper 88606.77 --price 85300 --capital 66000 --risk-pct 100 --grids 13",
+            "低于门槛",
+        ),
+    ];
+    for (extra, expected) in cases {
+        let mut args = vec!["--capital", "600", "--price", "84000", "--json"];
+        args.extend(extra.split_whitespace());
+        let output = run(&args);
+        assert!(!output.status.success());
+        assert!(output.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&output.stderr).contains(expected));
+    }
+}
+
+/// 输入：无；返回：无；TOML 类型及 CLI 覆盖正确，文本和 JSON 报告不把等差写成等比。
+#[test]
+fn grid_mode_config_export_and_text_keep_selected_type() {
+    let dir = TempDir::new().unwrap();
+    let config = dir.path().join("grid.toml");
+    let export = dir.path().join("grid.json");
+    std::fs::write(&config, "capital=600\nprice=425\nequity=30000\nmode='manual'\nlower=400\nupper=450\ngrids=5\ngrid_mode='arithmetic'\nstep_size='0.001'\n").unwrap();
+    let output = run(&[
+        "--config",
+        config.to_str().unwrap(),
+        "--json",
+        "--output",
+        export.to_str().unwrap(),
+    ]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(std::fs::read(export).unwrap(), output.stdout);
+    let p: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(p["mode"], "arithmetic");
+    let override_output = run(&[
+        "--config",
+        config.to_str().unwrap(),
+        "--grid-mode",
+        "geometric",
+        "--json",
+    ]);
+    assert!(override_output.status.success());
+    assert_eq!(
+        serde_json::from_slice::<Value>(&override_output.stdout).unwrap()["mode"],
+        "geometric"
+    );
+    let text = run(&["--config", config.to_str().unwrap()]);
+    assert!(text.status.success());
+    assert!(String::from_utf8_lossy(&text.stdout).contains("模式：等差网格"));
+}
+
 /// 输入：无；返回：无；粗精度下仍遵守预算和整数步长。
 #[test]
 fn rounded_prices_and_quantity_stay_feasible() {
@@ -535,6 +710,49 @@ fn adaptive_preserves_explicit_grid_count() {
     let p = adaptive_plan(&adaptive_candles(&dir, 180, "wave"), &["--grids", "4"]);
     assert_eq!(p["grid_count"], 4);
     assert_eq!(p["optimization"]["selected_grids"], 4);
+}
+
+/// 输入：无；返回：无；自适应等差尊重固定六格，尾部变化不能反向影响选参或发展指标。
+#[test]
+fn grid_mode_adaptive_arithmetic_keeps_fixed_count_and_holdout_isolation() {
+    let dir = TempDir::new().unwrap();
+    let extra = ["--grid-mode", "arithmetic", "--grids", "6"];
+    let a = adaptive_plan(&adaptive_candles(&dir, 180, "wave"), &extra);
+    let b = adaptive_plan(&adaptive_candles(&dir, 180, "tail"), &extra);
+    assert_eq!(a["mode"], "arithmetic");
+    assert_eq!(a["grid_count"], 6);
+    assert_eq!(a["optimization"]["selected_grids"], 6);
+    assert!(
+        a["optimization"]["holdout"]["candidate"]["trading_costs_usdt"]
+            .as_f64()
+            .unwrap()
+            > 0.0
+    );
+    assert_eq!(
+        a["optimization"]["development_folds"],
+        b["optimization"]["development_folds"]
+    );
+    assert_eq!(
+        a["optimization"]["development_score"],
+        b["optimization"]["development_score"]
+    );
+    assert_ne!(a["optimization"]["holdout"], b["optimization"]["holdout"]);
+    assert!(
+        a["grid_count_reason"]
+            .as_str()
+            .unwrap()
+            .contains("用户指定")
+    );
+}
+
+/// 输入：无；返回：无；自适应报告解释历史选优及资金缩放，不伪造固定格数上限。
+#[test]
+fn grid_mode_adaptive_explains_why_more_capital_need_not_add_grids() {
+    let dir = TempDir::new().unwrap();
+    let p = adaptive_plan(&adaptive_candles(&dir, 180, "wave"), &[]);
+    let reason = p["grid_count_reason"].as_str().unwrap();
+    assert!(reason.contains("发展段") && reason.contains("每格数量"));
+    assert!(reason.contains(&p["optimization"]["tested_candidates"].to_string()));
 }
 
 /// 输入：无；返回：无；单边下跌输出观望、库存亏损及原因。

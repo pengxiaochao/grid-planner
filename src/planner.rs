@@ -1,6 +1,6 @@
 //! 网格核心：先定线位，再按双边成本、统一数量、账户风险及交易精度搜索可行格数。
 
-use crate::config::{Algorithm, RangeMode, Settings, positive};
+use crate::config::{Algorithm, GridMode, RangeMode, Settings, positive};
 use crate::model::{Market, Plan};
 use crate::precision::{Direction, Step};
 use anyhow::{Context, Result, bail, ensure};
@@ -138,17 +138,20 @@ fn range_limits(s: &Settings, market: &Market) -> Result<(f64, f64)> {
     })
 }
 
-/// 输入：区间、格数和步长；返回：N+1 个递增价格，任何重叠价位都拒绝。
-fn prices(range: &Range, n: usize, tick: &Step) -> Result<Vec<f64>> {
+/// 输入：区间、格数、价格步长与网格类型；返回：N+1 个递增价格，任何重叠价位都拒绝。
+fn prices(range: &Range, n: usize, tick: &Step, mode: GridMode) -> Result<Vec<f64>> {
     let ratio = (range.upper / range.lower).powf(1.0 / n as f64); // 等比价格倍数 (上限/下限)^(1/N)，不是扣费后的收益。
     let mut prices = Vec::with_capacity(n + 1); // N+1 个价格点；N 个网格的资金分配使用前 N 个点。
     for i in 0..=n {
         // i 为从 0 到 N 的价格点序号；最后一点必须保留精确上限。
-        // 参考现价或当前生成价位，单位 USDT/基础币。
+        let raw = match mode {
+            GridMode::Geometric => range.lower * ratio.powf(i as f64),
+            GridMode::Arithmetic => range.lower + (range.upper - range.lower) * i as f64 / n as f64,
+        };
         let price = if i == n {
             range.upper
         } else {
-            tick.quantize(range.lower * ratio.powf(i as f64), Direction::Down)?
+            tick.quantize(raw, Direction::Down)?
         };
         prices.push(price);
     }
@@ -157,6 +160,11 @@ fn prices(range: &Range, n: usize, tick: &Step) -> Result<Vec<f64>> {
         "价格精度导致网格价位重叠，请减少格数或扩大区间"
     );
     Ok(prices)
+}
+
+/// 输入：已校验价位和价格步长；返回：完整十进制字符串数组，任何转换错误使报告失败。
+fn format_prices(prices: &[f64], tick: &Step) -> Result<Vec<String>> {
+    prices.iter().map(|price| tick.text(*price)).collect()
 }
 
 /// 输入：s 为成本/资金设置，market 为快照，range 为线位，n 为段数，tick/step 为价格/数量步长。
@@ -170,7 +178,7 @@ fn candidate(
     tick: &Step,
     step: &Step,
 ) -> Result<Candidate> {
-    let prices = prices(range, n, tick)?; // N+1 个价格点；N 个网格的资金分配使用前 N 个点。
+    let prices = prices(range, n, tick, s.grid_mode)?; // 两种类型共用全部资金、风险、成本及精度校验。
     let gross = prices // 逐格比较后取最小毛收益，避免价格取整使某格过密。
         .windows(2)
         .map(|p| (p[1] / p[0] - 1.0) * 100.0)
@@ -265,7 +273,16 @@ fn risk_budget(s: &Settings) -> f64 {
     s.equity.unwrap_or(s.capital) * s.risk_pct / 100.0
 }
 
-/// 输入：已校验候选和行情；返回：可导出、可填写币安的完整方案。
+/// 输入：设置；返回：固定格数或经典最多可行格数的解释，避免把结果误认为硬编码上限。
+fn grid_count_reason(s: &Settings) -> String {
+    if let Some(n) = s.grids {
+        format!("用户指定 {n} 格；仍需通过单格成本、订单金额、精度和风险校验。")
+    } else {
+        "经典算法在成本、单笔金额、精度和风险约束下取最多可行格数；增加资金不会扩大同一区间每格的比例价差。".into()
+    }
+}
+
+/// 输入：设置、行情、区间、候选及价格/数量步长；返回：可导出、可填写币安的完整方案。
 fn build_plan(
     s: &Settings,
     market: Market,
@@ -273,11 +290,10 @@ fn build_plan(
     c: Candidate,
     steps: (&Step, &Step),
 ) -> Result<Plan> {
-    let grid_prices: Result<Vec<_>> = c.prices.iter().map(|p| steps.0.text(*p)).collect(); // steps 依次为价格及数量精度；转换失败使整份方案失败。
     Ok(Plan {
         warnings: warnings(s, &market),
         symbol: s.symbol.clone(),
-        mode: "geometric".into(),
+        mode: s.grid_mode,
         range_model: format!("{:?}", s.mode).to_lowercase(),
         algorithm: Algorithm::Classic,
         optimization: None,
@@ -291,8 +307,9 @@ fn build_plan(
         stop_loss: steps.0.text(range.stop)?,
         take_profit: steps.0.text(range.take)?,
         grid_count: c.prices.len() - 1,
+        grid_count_reason: grid_count_reason(s),
         quantity_per_grid: steps.1.text(c.qty)?,
-        grid_prices: grid_prices?,
+        grid_prices: format_prices(&c.prices, steps.0)?,
         initial_base_quantity_estimate: c.initial_base,
         fee_reserve_usdt: c.reserve,
         minimum_order_usdt: s.min_order_usdt.max(market.rules.min_notional),

@@ -1,0 +1,18 @@
+# V0.4 等差离线示例；价格及过滤器需用户核对，不代表实时 BTC 行情。
+# 运行：cargo run --locked -- --config examples/arithmetic.toml。
+capital = 600
+equity = 600
+price = 84000
+symbol = "BTCUSDT"
+# 区间来源与排列独立：经典百分比区间，等差价位、统一基础币数量。
+mode = "percent"
+algorithm = "classic"
+grid_mode = "arithmetic"
+down_pct = 10
+up_pct = 10
+# 风险和成本均填百分比数值，仍执行逐格净收益及单笔金额约束。
+risk_pct = 2
+fee_pct = 0.1
+slippage_pct = 0.05
+min_net_pct = 0.3
+min_order_usdt = 30

@@ -3,7 +3,7 @@
 # Rust 后端二进制名；桌面脚本按 grid-planner 复制到 .app 的 Resources。
 name = "grid-planner"
 # 应用功能版本，修改时同步 Cargo.lock 与桌面 Info.plist。
-version = "0.3.0"
+version = "0.4.0"
 # 使用 Rust 2024 语言版本，需要至少支持该 edition 的工具链。
 edition = "2024"
 # 编译器最低声明，不等于已验证每个依赖都能在此版本运行；CI 使用 stable。

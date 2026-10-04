@@ -12,9 +12,9 @@
     <!-- APPL 表示可启动的 macOS 应用包，不是普通资源目录。 -->
     <key>CFBundlePackageType</key><string>APPL</string>
     <!-- 用户可见功能版本；发布新版本时与 Cargo.toml 保持一致。 -->
-    <key>CFBundleShortVersionString</key><string>0.3.0</string>
+    <key>CFBundleShortVersionString</key><string>0.4.0</string>
     <!-- 内部构建版本号；重新发布时递增，便于系统区分包版本。 -->
-    <key>CFBundleVersion</key><string>3</string>
+    <key>CFBundleVersion</key><string>4</string>
     <!-- 最低系统声明；脚本中的 Rust 与 Swift 部署目标同为 macOS 13。 -->
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <!-- 菜单栏辅助应用：不显示普通 Dock 图标，关闭窗口后仍继续运行。 -->

@@ -34,7 +34,7 @@ struct PlannerView: View {
                 .frame(width: 48, height: 48).background(.blue.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
             VStack(alignment: .leading, spacing: 4) {
                 Text("网格交易助手").font(.system(size: 21, weight: .semibold))
-                Text("USDT 现货 · 等比网格 · 账户风险预算").font(.caption).foregroundStyle(.secondary)
+                Text("USDT 现货 · 等差 / 等比网格 · 账户风险预算").font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
             Button("使用说明", action: openHelp)
@@ -108,6 +108,7 @@ struct FormPane: View {
     /// 输入：当前区间模型；返回：该模型专用参数，隐藏字段不传到错误模式。
     private var strategy: some View {
         VStack(alignment: .leading, spacing: 11) {
+            gridSettings
             Picker("选参算法", selection: binding(.algorithm)) {
                 Text("自适应 · 历史验证").tag("adaptive")
                 Text("经典 · 最多可行格数").tag("classic")
@@ -138,6 +139,19 @@ struct FormPane: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
         }.padding(8)
+    }
+
+    /// 输入：网格类型与格数草稿；返回：始终可见的类型、搜索上限和固定值选项。
+    private var gridSettings: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            Picker("网格类型", selection: binding(.gridMode)) {
+                Text("等比 · 相同比例").tag("geometric")
+                Text("等差 · 相同价差").tag("arithmetic")
+            }.accessibilityIdentifier("grid-mode")
+            rows([.maxGrids, .grids])
+            Text("固定格数留空时自动选择；自适应按历史评分选优，经典选最多可行格数。更多格会缩小价差并分散每格资金，不保证收益更高。")
+                .font(.caption).foregroundStyle(.secondary)
+        }
     }
 
     /// 输入：周期及根数；返回：独立获取真实历史的入口，不要求先填完资金。
@@ -180,7 +194,7 @@ struct FormPane: View {
     /// 输入：成本、风险及覆盖价草稿；返回：可展开的高级参数区。
     private var advanced: some View {
         VStack(alignment: .leading, spacing: 11) {
-            rows([.fee, .slippage, .minOrder, .minNet, .reserve, .stress, .maxGrids, .grids])
+            rows([.fee, .slippage, .minOrder, .minNet, .reserve, .stress])
             if model.form.range != .atr { rows([.outside]) }
             rows([.stop, .take])
             Text("百分比直接填数值：0.1 表示 0.1%。手填 SL 需低于下限，TP 需高于上限。")
@@ -290,7 +304,7 @@ struct ResultPane: View {
             HStack {
                 Label(p.symbol, systemImage: "checkmark.circle.fill").font(.title3.weight(.semibold))
                 Spacer()
-                Text("现货 · 等比").font(.caption).foregroundStyle(.secondary)
+                Text("现货 · \(p.gridModeTitle)").font(.caption).foregroundStyle(.secondary)
             }
             Text("参考现价 \(p.referencePrice) USDT").font(.caption).foregroundStyle(.secondary)
             if let audit = p.optimization { optimization(audit) }
@@ -307,6 +321,8 @@ struct ResultPane: View {
                     metric("未分配资金", "\(money(p.unallocatedUsdt)) USDT")
                     metric("停止时卖出全部基础币", "开启")
                     metric("每格数量估算", p.quantityPerGrid)
+                    Text(p.gridCountExplanation).font(.caption).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }.padding(8)
             }
             risk(p)
@@ -343,7 +359,8 @@ struct ResultPane: View {
     private func optimization(_ report: OptimizationData) -> some View {
         GroupBox(report.recommendation == "wait" ? "建议观望 · 下方参数仅供诊断" : "自适应 · 历史门槛通过") {
             VStack(alignment: .leading, spacing: 10) {
-                metric("区间 ATR 倍数 / 可行候选", "\(money(report.selectedRangeAtrMult)) / \(report.feasibleCandidates)")
+                metric("区间 ATR 倍数", money(report.selectedRangeAtrMult))
+                metric("可行 / 搜索组合", "\(report.feasibleCandidates) / \(report.testedCandidates)")
                 metric("发展验证 / 风险调整评分", "\(report.developmentFolds.count) 段 / \(money(report.developmentScore))")
                 metric("最终检验", "\(report.holdout.evaluatedBars) 根（未参与选参）")
                 Text("\(timestamp(report.holdout.evaluationStartOpenMs)) — \(timestamp(report.holdout.evaluationEndOpenMs))")

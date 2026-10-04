@@ -4,6 +4,8 @@ capital = 600
 symbol = "BTCUSDT"
 mode = "atr"
 algorithm = "adaptive"
+# geometric 等比 / arithmetic 等差；也可用 --grid-mode arithmetic 覆盖。
+grid_mode = "geometric"
 interval = "1d"
 history_bars = 180
 atr_period = 14

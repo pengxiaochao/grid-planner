@@ -31,6 +31,8 @@ enum ProxyChoice: String, Codable, CaseIterable, Sendable {
 enum FieldID: String, CaseIterable, Sendable {
     /// 选参算法 classic/adaptive，旧草稿缺失时使用自适应默认值。
     case algorithm
+    /// 网格类型 geometric/arithmetic，旧草稿缺失时保留等比。
+    case gridMode = "grid-mode"
     /// 本次允许投入的上限，单位 USDT；不是必须全部投入的金额。
     case capital
     /// 账户总资产，单位 USDT；留空时以 capital 作为风险预算基数。
@@ -117,6 +119,7 @@ struct FieldSpec: Sendable {
     /// 全部字段的默认展示规格；费率、缓冲和倍数为可调假设，价格不填旧行情。
     static let catalog: [FieldID: FieldSpec] = [
         .algorithm: .init(title: "选参算法", initial: "adaptive", placeholder: "adaptive"),
+        .gridMode: .init(title: "网格类型", initial: "geometric", placeholder: "geometric"),
         .capital: .init(title: "最多投入 · USDT", initial: "600", placeholder: "600"),
         .equity: .init(title: "账户资产 · USDT", initial: "", placeholder: "留空 = 最多投入"),
         .symbol: .init(title: "交易对", initial: "BTCUSDT", placeholder: "BTCUSDT"),
@@ -177,7 +180,7 @@ struct FormState: Codable, Equatable, Sendable {
     /// 输入：当前表单；返回：用于 Process.arguments 的参数数组，完全不经过 Shell。
     func arguments() throws -> [String] {
         try require([.capital, .symbol])
-        var args = ["--json", "--mode", range.rawValue, "--algorithm", value(.algorithm)] // 算法选择显式传入，不因历史不足悄悄切回旧版。
+        var args = ["--json", "--mode", range.rawValue, "--algorithm", value(.algorithm), "--grid-mode", value(.gridMode)] // 区间、算法与价位排列独立传入，不因约束失败替换用户选择。
         append([.capital, .equity, .risk, .fee, .slippage, .minOrder, .minNet,
                 .reserve, .stress, .maxGrids, .grids, .stop, .take], to: &args)
         args += ["--symbol", value(.symbol).uppercased()]

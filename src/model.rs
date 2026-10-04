@@ -1,7 +1,7 @@
 //! 数据模型：在计算、JSON 导出和桌面端之间传递同一份带来源与时间的快照。
 
 use crate::candles::Candle;
-use crate::config::{Algorithm, Settings};
+use crate::config::{Algorithm, GridMode, Settings};
 use anyhow::{Context, Result, ensure};
 use serde::Serialize;
 
@@ -162,8 +162,8 @@ impl History {
 pub struct Plan {
     /// 可填写币安的 USDT 现货交易对。
     pub symbol: String,
-    /// 网格排列方式，当前固定为 geometric（等比）。
-    pub mode: String,
+    /// 网格排列方式 geometric（等比）或 arithmetic（等差），序列化为小写字符串。
+    pub mode: GridMode,
     /// 区间计算模型标识：percent、atr 或 manual。
     pub range_model: String,
     /// classic 或 adaptive；算法与区间模型分别标记，避免把 ATR 当成收益优化。
@@ -190,6 +190,8 @@ pub struct Plan {
     pub take_profit: String,
     /// 网格段数 N；对应 N+1 个价格点，不能把两者混为一谈。
     pub grid_count: usize,
+    /// 格数来自固定输入、最多可行搜索或发展段选优；解释资金增大为何不必增加格数。
+    pub grid_count_reason: String,
     /// 按 stepSize 向下取整的每格统一基础币数量字符串。
     pub quantity_per_grid: String,
     /// 从下限到上限的 N+1 个严格递增价格字符串。

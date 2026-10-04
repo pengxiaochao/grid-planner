@@ -1,4 +1,4 @@
-//! 现货等量等比网格的 OHLC 情景回放；库存、成本、跳空和清仓全部计入权益。
+//! 现货等量基础币网格的 OHLC 情景回放；两种排列共用库存、成本、跳空及清仓会计。
 
 use crate::candles::Candle;
 use crate::model::Plan;

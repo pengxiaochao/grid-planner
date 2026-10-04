@@ -27,6 +27,26 @@ pub enum Algorithm {
     Adaptive,
 }
 
+/// 网格价位排列方式；与区间来源、选参算法独立，默认保持等比兼容。
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, ValueEnum, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum GridMode {
+    /// 相邻价位的价格比例相同；取整后仍逐格复核。
+    Geometric,
+    /// 相邻价位的绝对价差相同；高价格的收益比例通常更低。
+    Arithmetic,
+}
+
+impl GridMode {
+    /// 输入：网格排列方式；返回：供报告显示的中文类型名称。
+    pub fn title(self) -> &'static str {
+        match self {
+            Self::Geometric => "等比",
+            Self::Arithmetic => "等差",
+        }
+    }
+}
+
 /// 合并 TOML、命令行和交互输入后的计算设置。
 /// 所有 *_pct 字段使用“百分比数值”，金额以 USDT、数量以基础币计；未知 TOML 字段会被拒绝。
 #[derive(Clone, Debug, Deserialize)]
@@ -44,6 +64,8 @@ pub struct Settings {
     pub mode: RangeMode,
     /// 格数/区间选参算法；默认 classic，保留既有 CLI/TOML 行为。
     pub algorithm: Algorithm,
+    /// 网格排列方式 geometric / arithmetic；默认等比，不根据资金量自动切换。
+    pub grid_mode: GridMode,
     /// 手填的 ATR 绝对价格波幅，单位 USDT；None 表示从其他来源计算。
     pub atr: Option<f64>,
     /// 可选的用户 OHLC CSV 路径，仅离线 ATR 模式使用；不自动加载演示文件。
@@ -122,6 +144,7 @@ impl Default for Settings {
             symbol: "BTCUSDT".into(),
             mode: RangeMode::Percent,
             algorithm: Algorithm::Classic,
+            grid_mode: GridMode::Geometric,
             atr: None,
             candles: None,
             interval: "1d".into(),
@@ -213,6 +236,9 @@ pub struct Cli {
     /// 选参算法 classic / adaptive；默认 classic；adaptive 使用已收盘历史滚动验证
     #[arg(long, value_enum)]
     pub algorithm: Option<Algorithm>,
+    /// 网格排列 geometric 等比 / arithmetic 等差；默认 geometric，与区间模型独立
+    #[arg(long, value_enum)]
+    pub grid_mode: Option<GridMode>,
     /// 手填 ATR 的价格数值，仅用于 atr 模式
     #[arg(long)]
     pub atr: Option<f64>,
@@ -351,6 +377,7 @@ impl Cli {
             symbol,
             mode,
             algorithm,
+            grid_mode,
             interval,
             atr_period,
             range_atr_mult,
