@@ -1,0 +1,106 @@
+# 仓库上传源码后，由两种 CPU 架构的 macOS 机器分别构建菜单栏应用。
+# 详细操作、下载路径与签名边界见 docs/github-build.md。
+name: 构建 macOS 应用
+
+on:
+  push:
+    # 默认主分支均支持；其他命名的主分支可在此追加。
+    branches: [main, master]
+    # 推送版本标签也生成 Artifact，但不会自动发布 GitHub Release。
+    tags: ["v*"]
+  pull_request:
+  # 在 Actions 页面提供 Run workflow 手动打包入口。
+  workflow_dispatch:
+
+# 仅需读取源码，不向仓库或 Release 写入内容。
+permissions:
+  contents: read
+
+# 同一分支的新提交取消旧构建，避免下载已被替代的版本。
+concurrency:
+  group: macos-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: macOS ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      # 一种架构失败时仍允许另一种完成，便于分别定位平台问题。
+      fail-fast: false
+      matrix:
+        include:
+          # 明确使用架构标签，不依赖 macos-latest 随时间变化的架构。
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    env:
+      CARGO_TERM_COLOR: always # 保留编译日志颜色，方便阅读失败信息。
+      MACOSX_DEPLOYMENT_TARGET: "13.0" # Rust 链接的系统目标与 Swift/Info.plist 对齐。
+    steps:
+      - name: 获取源码
+        # 固定官方 action 提交，括号中的版本用于人工维护时核对。
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # 构建/测试不需要保存可用于 Git 写入的凭据。
+
+      - name: 检查构建环境
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "${{ matrix.arch }}"
+          test -f Cargo.lock
+          xcodebuild -version
+          xcrun swiftc --version
+          python3 --version
+
+      - name: 安装 Rust 工具链
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+          rustup default stable
+          rustc --version
+          cargo --version
+
+      - name: 缓存锁定的 Rust 依赖
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          # 只缓存下载内容，不共享不同架构的编译二进制。
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-${{ matrix.arch }}-cargo-${{ hashFiles('Cargo.lock') }}
+
+      - name: Rust 格式与静态检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Rust CLI 端到端验收
+        # 真实子进程及本地 HTTP/SOCKS5h 服务，不依赖币安访问区域或用户代理。
+        run: cargo test --locked --test cli
+
+      - name: 构建应用
+        # 同一本地脚本负责 Rust/Swift、资源、plist、签名、ZIP 和 SHA-256。
+        run: bash scripts/build-macos.sh
+
+      - name: 桌面桥接端到端验收
+        # 必须使用刚生成 .app 内的真实后端，缺少组件或行为异常都使任务失败。
+        run: bash scripts/test-macos.sh
+
+      - name: 上传可运行应用
+        # 默认只在前面全部成功后执行；上传 ZIP 保留内层 .app 的可执行权限。
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: macOS-app-${{ matrix.arch }}
+          path: |
+            dist/GridPlanner-macOS-${{ matrix.arch }}.zip
+            dist/GridPlanner-macOS-${{ matrix.arch }}.zip.sha256
+          if-no-files-found: error # 路径写错时直接失败，不给出空的成功下载。
+          retention-days: 14 # 临时构建保留两周；长期版本可另放 GitHub Releases。
+          compression-level: 0 # 内层已是 ZIP，外层不再重复压缩以节省上传时间。
