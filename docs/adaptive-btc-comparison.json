@@ -1,0 +1,172 @@
+{
+  "symbol": "BTCUSDT",
+  "source_url": "https://api.binance.com/api/v3/klines",
+  "market_as_of_ms": 1791124606840,
+  "rules": {
+    "tick_size": "0.01000000",
+    "step_size": "0.00001000",
+    "min_notional": 5.0,
+    "min_qty": 1e-05,
+    "max_qty": 9000.0,
+    "min_price": 0.01,
+    "max_price": 1000000.0,
+    "max_notional": 9000000.0,
+    "max_orders": 200
+  },
+  "capital_usdt": 600,
+  "equity_usdt": 600,
+  "fee_pct": 0.1,
+  "slippage_pct": 0.05,
+  "results": [
+    {
+      "bars": 180,
+      "csv_sha256": "e5a2806f082ffc9288b7a2db8f8a07826d0d02f96cefd2fde3074df5221b01b1",
+      "reference_price": 85174.01,
+      "selected_range_atr_mult": 1.5,
+      "selected_grids": 2,
+      "current_grids": 2,
+      "development_score": 0.23469728612764712,
+      "baseline_score": -1.1606472047631016,
+      "recommendation": "ready",
+      "reason": "发展验证与最终检验通过；历史优势不保证未来收益，创建前核对交易所预览。",
+      "holdout": {
+        "train_end_open_ms": 1787875200000,
+        "evaluation_start_open_ms": 1787961600000,
+        "evaluation_end_open_ms": 1790985600000,
+        "evaluated_bars": 36,
+        "candidate": {
+          "net_profit_usdt": 7.612353301989629,
+          "net_return_pct": 1.2687255503316048,
+          "max_drawdown_pct": 1.1481047372252373,
+          "completed_cycles": 2,
+          "trading_costs_usdt": 0.4929018288568288,
+          "stress_net_return_pct": 1.186403201900324,
+          "stress_max_drawdown_pct": 1.1471510842097008,
+          "path_returns_pct": [
+            1.2687255503316048,
+            1.2687255503316048
+          ],
+          "stop_triggered": false,
+          "take_triggered": true
+        },
+        "baseline": {
+          "net_profit_usdt": 5.998497749047601,
+          "net_return_pct": 0.9997496248412668,
+          "max_drawdown_pct": 0.6850802978750539,
+          "completed_cycles": 2,
+          "trading_costs_usdt": 0.24161337242284472,
+          "stress_net_return_pct": 0.9593669233899125,
+          "stress_max_drawdown_pct": 0.7016804157930082,
+          "path_returns_pct": [
+            0.9997496248412668,
+            0.9997496248412668
+          ],
+          "stop_triggered": false,
+          "take_triggered": false
+        },
+        "baseline_error": null,
+        "buy_hold_return_pct": 2.2361464126546644
+      }
+    },
+    {
+      "bars": 360,
+      "csv_sha256": "e4ad1f6540aad305abd447d04ea6ec7123de202d716142f9238e9b85c3a96ba0",
+      "reference_price": 85174.01,
+      "selected_range_atr_mult": 1.5,
+      "selected_grids": 3,
+      "current_grids": 3,
+      "development_score": -5.691118080954444,
+      "baseline_score": -6.780567437006358,
+      "recommendation": "wait",
+      "reason": "发展段风险调整评分不为正；三个发展段中盈利段不足两个；最终检验收益低于旧算法",
+      "holdout": {
+        "train_end_open_ms": 1784764800000,
+        "evaluation_start_open_ms": 1784851200000,
+        "evaluation_end_open_ms": 1790985600000,
+        "evaluated_bars": 72,
+        "candidate": {
+          "net_profit_usdt": 5.500367089614656,
+          "net_return_pct": 0.9167278482691092,
+          "max_drawdown_pct": 1.1352405140701132,
+          "completed_cycles": 3,
+          "trading_costs_usdt": 0.5296341181371395,
+          "stress_net_return_pct": 0.6344437760220293,
+          "stress_max_drawdown_pct": 1.0855586404068405,
+          "path_returns_pct": [
+            1.1502313832357725,
+            0.9167278482691092
+          ],
+          "stop_triggered": false,
+          "take_triggered": true
+        },
+        "baseline": {
+          "net_profit_usdt": 6.2005046277377005,
+          "net_return_pct": 1.0334174379562835,
+          "max_drawdown_pct": 0.7167444315860105,
+          "completed_cycles": 2,
+          "trading_costs_usdt": 0.27490001718765755,
+          "stress_net_return_pct": 0.9874165387087146,
+          "stress_max_drawdown_pct": 0.7159107818596868,
+          "path_returns_pct": [
+            1.0334174379562835,
+            1.0334174379562835
+          ],
+          "stop_triggered": false,
+          "take_triggered": true
+        },
+        "baseline_error": null,
+        "buy_hold_return_pct": 8.632111524944658
+      }
+    },
+    {
+      "bars": 1000,
+      "csv_sha256": "6aeb98abba916f7ab85b12e76c38bb253b6183fdbb27c35208c8bd568541495f",
+      "reference_price": 85174.01,
+      "selected_range_atr_mult": 2.25,
+      "selected_grids": 2,
+      "current_grids": 2,
+      "development_score": -2.014937716111702,
+      "baseline_score": -4.385737350137292,
+      "recommendation": "wait",
+      "reason": "发展段风险调整评分不为正；最终检验扣费后亏损或持平；最终检验双倍成本后缺少正收益",
+      "holdout": {
+        "train_end_open_ms": 1773705600000,
+        "evaluation_start_open_ms": 1773792000000,
+        "evaluation_end_open_ms": 1790985600000,
+        "evaluated_bars": 200,
+        "candidate": {
+          "net_profit_usdt": -2.774444392309533,
+          "net_return_pct": -0.46240739871825554,
+          "max_drawdown_pct": 2.110624872282972,
+          "completed_cycles": 2,
+          "trading_costs_usdt": 0.612473428005366,
+          "stress_net_return_pct": -1.2699383531768451,
+          "stress_max_drawdown_pct": 2.1245064920584866,
+          "path_returns_pct": [
+            -0.46240739871825554,
+            -0.46240739871825554
+          ],
+          "stop_triggered": true,
+          "take_triggered": false
+        },
+        "baseline": {
+          "net_profit_usdt": -6.1754716295558865,
+          "net_return_pct": -1.0292452715926477,
+          "max_drawdown_pct": 2.0850537955779225,
+          "completed_cycles": 1,
+          "trading_costs_usdt": 0.4052997129209538,
+          "stress_net_return_pct": -1.0965816314295769,
+          "stress_max_drawdown_pct": 2.1064824347472366,
+          "path_returns_pct": [
+            -1.0292452715926477,
+            -1.0292452715926477
+          ],
+          "stop_triggered": true,
+          "take_triggered": false
+        },
+        "baseline_error": null,
+        "buy_hold_return_pct": 2.517330339791194
+      }
+    }
+  ]
+}

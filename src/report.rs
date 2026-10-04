@@ -8,6 +8,18 @@ use std::fmt::Write;
 pub fn text_report(p: &Plan, levels: bool) -> Result<String> {
     let mut text = String::new(); // 逐段追加的中文报告缓冲，最终一次输出，避免部分成功内容。
     writeln!(text, "币安现货网格填写参数（{}）", p.symbol)?;
+    if let Some(o) = &p.optimization {
+        writeln!(
+            text,
+            "自适应判定：{}；{}",
+            if o.recommendation == "wait" {
+                "观望（以下为诊断参数）"
+            } else {
+                "历史门槛通过"
+            },
+            o.reason
+        )?;
+    }
     writeln!(
         text,
         "模式：等比网格；区间模型：{}；参考价：{} USDT",
@@ -36,19 +48,23 @@ pub fn text_report(p: &Plan, levels: bool) -> Result<String> {
     )?;
     writeln!(text, "高级设置：停止时卖出全部基础币 = 开启")?;
     append_estimates(&mut text, p)?;
-    if levels {
-        writeln!(text, "\n网格价格（从下至上）：")?;
-        for (i, price) in p.grid_prices.iter().enumerate() {
-            // i 为价格点序号，price 为后端保留精度的字符串。
-            writeln!(text, "  {i:>3}: {price}")?;
-        }
-    }
+    append_levels(&mut text, p, levels)?;
     writeln!(text, "\n计算边界：")?;
     for warning in &p.warnings {
-        // 逐条保留计算假设，复制/保存报告时仍能看到风险边界。
         writeln!(text, "- {warning}")?;
     }
     Ok(text)
+}
+
+/// 输入：报告缓冲、方案及是否展开；返回：无；保持 N+1 个价格点的原始精度。
+fn append_levels(text: &mut String, p: &Plan, levels: bool) -> Result<()> {
+    if levels {
+        writeln!(text, "\n网格价格（从下至上）：")?;
+        for (i, price) in p.grid_prices.iter().enumerate() {
+            writeln!(text, "  {i:>3}: {price}")?;
+        }
+    }
+    Ok(())
 }
 
 /// 输入：报告缓冲区与方案；返回：无；补充收益、风险和数据来源。
@@ -87,6 +103,41 @@ fn append_estimates(text: &mut String, p: &Plan) -> Result<()> {
         p.stress_exit_price, p.stress_scenario_loss_usdt
     )?;
     append_sources(text, p)?;
+    append_optimization(text, p)?;
+    Ok(())
+}
+
+/// 输入：报告缓冲与可选自适应审计；返回：无；显示成本、回撤及未参与选参的最终检验。
+fn append_optimization(text: &mut String, p: &Plan) -> Result<()> {
+    let Some(o) = &p.optimization else {
+        return Ok(());
+    };
+    writeln!(
+        text,
+        "\n自适应历史验证：{} / {} 候选可行，区间 {:.2} ATR，发展段评分 {:.4}",
+        o.feasible_candidates, o.tested_candidates, o.selected_range_atr_mult, o.development_score
+    )?;
+    let h = &o.holdout;
+    writeln!(
+        text,
+        "最终检验（未参与选参）：{} 根，本金净收益 {:.4}%，最大权益回撤 {:.4}%，双倍成本收益 {:.4}%，网格卖出 {} 次",
+        h.evaluated_bars,
+        h.candidate.net_return_pct,
+        h.candidate.max_drawdown_pct,
+        h.candidate.stress_net_return_pct,
+        h.candidate.completed_cycles
+    )?;
+    if let Some(b) = &h.baseline {
+        writeln!(text, "旧算法同段本金净收益：{:.4}%", b.net_return_pct)?;
+    }
+    if let Some(error) = &h.baseline_error {
+        writeln!(text, "旧算法同段不可行：{error}")?;
+    }
+    writeln!(
+        text,
+        "同额投入买入持有：{:.4}%（风险敞口不同）；历史结果不保证未来收益。",
+        h.buy_hold_return_pct
+    )?;
     Ok(())
 }
 

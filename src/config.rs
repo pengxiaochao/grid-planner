@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result, ensure};
 use clap::{Parser, ValueEnum};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 /// 区间模型枚举；模型只决定上下限的来源，不代表未来涨跌预测。
@@ -17,9 +17,19 @@ pub enum RangeMode {
     Manual,
 }
 
+/// 选参算法；经典模式保持旧调用，自适应模式必须有足量已收盘 OHLC。
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, ValueEnum, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum Algorithm {
+    /// 只选择满足约束的最多格数，不进行收益回测。
+    Classic,
+    /// 三段滚动发展验证选参，加独立最终检验及观望门槛。
+    Adaptive,
+}
+
 /// 合并 TOML、命令行和交互输入后的计算设置。
 /// 所有 *_pct 字段使用“百分比数值”，金额以 USDT、数量以基础币计；未知 TOML 字段会被拒绝。
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Settings {
     /// 本次允许投入的上限，单位 USDT；不是必须全部投入的金额。
@@ -32,6 +42,8 @@ pub struct Settings {
     pub symbol: String,
     /// 区间来源：百分比、Wilder ATR 或手动上下限。
     pub mode: RangeMode,
+    /// 格数/区间选参算法；默认 classic，保留既有 CLI/TOML 行为。
+    pub algorithm: Algorithm,
     /// 手填的 ATR 绝对价格波幅，单位 USDT；None 表示从其他来源计算。
     pub atr: Option<f64>,
     /// 可选的用户 OHLC CSV 路径，仅离线 ATR 模式使用；不自动加载演示文件。
@@ -109,6 +121,7 @@ impl Default for Settings {
             equity: None,
             symbol: "BTCUSDT".into(),
             mode: RangeMode::Percent,
+            algorithm: Algorithm::Classic,
             atr: None,
             candles: None,
             interval: "1d".into(),
@@ -197,6 +210,9 @@ pub struct Cli {
     /// 区间模型，默认 percent：百分比 / ATR / 手动
     #[arg(long, value_enum)]
     pub mode: Option<RangeMode>,
+    /// 选参算法 classic / adaptive；默认 classic；adaptive 使用已收盘历史滚动验证
+    #[arg(long, value_enum)]
+    pub algorithm: Option<Algorithm>,
     /// 手填 ATR 的价格数值，仅用于 atr 模式
     #[arg(long)]
     pub atr: Option<f64>,
@@ -334,6 +350,7 @@ impl Cli {
             price,
             symbol,
             mode,
+            algorithm,
             interval,
             atr_period,
             range_atr_mult,
@@ -390,10 +407,32 @@ impl Settings {
         self.validate_market()?;
         self.validate_rates()?;
         self.validate_mode(live)?;
+        self.validate_algorithm(live)?;
         self.validate_limits()?;
         ensure!(
             live || self.history_bars.is_none(),
             "history-bars 需要 --live 或 --fetch-history"
+        );
+        Ok(())
+    }
+
+    /// 输入：算法与数据选择；返回：自适应证据及停止价约束的确认，经典模式不增加要求。
+    fn validate_algorithm(&self, live: bool) -> Result<()> {
+        if self.algorithm == Algorithm::Classic {
+            return Ok(());
+        }
+        ensure!(self.mode == RangeMode::Atr, "自适应算法需要 mode=atr");
+        ensure!(
+            live || self.candles.is_some(),
+            "自适应算法需要 --live 或已收盘 OHLC --candles，不能只用手填 ATR"
+        );
+        ensure!(
+            self.stop_loss.is_none() && self.take_profit.is_none(),
+            "自适应滚动验证不能使用固定绝对 SL/TP；请使用止损/停止价 ATR 倍数"
+        );
+        ensure!(
+            2.0 * (self.fee_pct + self.slippage_pct) < 100.0,
+            "自适应双倍每边成本必须小于 100%"
         );
         Ok(())
     }

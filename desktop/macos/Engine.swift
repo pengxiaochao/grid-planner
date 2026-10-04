@@ -13,6 +13,10 @@ struct AppFailure: LocalizedError, Sendable {
 /// Rust Plan JSON 的桌面展示模型，snake_case 由解码器映射为 camelCase。
 /// 只解码界面需要的字段；精确价格/数量仍保留字符串，避免重新计算改变结果。
 struct PlanData: Decodable, Sendable {
+    /// classic/adaptive；可选字段保持与旧后端导出兼容。
+    let algorithm: String?
+    /// 自适应历史证据与观望判定，经典模式为 nil。
+    let optimization: OptimizationData?
     /// 大写 USDT 现货交易对，例如 BTCUSDT。
     let symbol: String
     /// 计算方案时的参考现价，单位 USDT。
@@ -60,9 +64,13 @@ struct PlanData: Decodable, Sendable {
     /// 用于显示的历史快照；方案内为可选同批数据，离线不附加合成行情。
     let history: HistoryData?
 
+    /// 输入：后端算法判定；返回：是否通过历史门槛、可以复制填写参数。
+    var isActionable: Bool { optimization?.recommendation != "wait" }
+
     /// 输入：方案；返回：方便抄到币安的中文文本，风险信息与关键参数一起保留。
     func copyText() -> String {
-        """
+        if !isActionable { return "建议观望：\(optimization?.reason ?? "证据不足")\n\(validationText())" }
+        return """
         \(symbol) 现货等比网格
         参考现价：\(referencePrice) USDT
         下限：\(lowerPrice)
@@ -76,9 +84,66 @@ struct PlanData: Decodable, Sendable {
         止损情景亏损：\(money(stopScenarioLossUsdt)) USDT
         账户风险预算：\(money(riskBudgetUsdt)) USDT
         压力情景亏损：\(money(stressScenarioLossUsdt)) USDT
+        \(validationText())
         参数仅供创建前核对，实际成交可能超过风险预算。
         """
     }
+
+    /// 输入：可选历史审计；返回：可复制的最终检验摘要，经典模式明确未做收益选参。
+    private func validationText() -> String {
+        guard let report = optimization else { return "经典算法：最多可行格数，未做历史收益选参。" }
+        return "最终检验 \(report.holdout.evaluatedBars) 根：本金净收益 \(money(report.holdout.candidate.netReturnPct))%，回撤 \(money(report.holdout.candidate.maxDrawdownPct))%。历史结果不保证未来收益。"
+    }
+}
+
+/// 后端自适应报告中用于原生展示的字段；原始 JSON 导出保留全部审计信息。
+struct OptimizationData: Decodable, Sendable {
+    /// 仅用发展验证段选择的 ATR 区间倍数。
+    let selectedRangeAtrMult: Double
+    /// 实际历史可行的候选组合数。
+    let feasibleCandidates: Int
+    /// 扣除回撤、波动及成本压力后的发展段评分。
+    let developmentScore: Double
+    /// 旧策略同口径评分，不可行时为空。
+    let baselineScore: Double?
+    /// 三段滚动发展验证。
+    let developmentFolds: [ValidationData]
+    /// 未参与选参的最后 20% 历史检验。
+    let holdout: ValidationData
+    /// ready/wait；ready 仅表示历史门槛通过。
+    let recommendation: String
+    /// 通过或观望的完整中文原因。
+    let reason: String
+}
+
+/// 同段候选、经典算法与买入持有对照，不在桌面重新计算收益。
+struct ValidationData: Decodable, Sendable {
+    /// 实际验证根数。
+    let evaluatedBars: Int
+    /// 最终检验首根 Unix 开盘毫秒。
+    let evaluationStartOpenMs: UInt64
+    /// 最终检验末根 Unix 开盘毫秒。
+    let evaluationEndOpenMs: UInt64
+    /// 候选策略的清仓收益和回撤。
+    let candidate: EvaluationMetrics
+    /// 原设置对应经典策略的同段结果，可能不可行。
+    let baseline: EvaluationMetrics?
+    /// 同额投入买入持有的本金收益。
+    let buyHoldReturnPct: Double
+}
+
+/// 回放结果；百分比按用户可投入本金计算，库存浮亏和成本已计入。
+struct EvaluationMetrics: Decodable, Sendable {
+    /// 清仓后的净利润，单位 USDT。
+    let netProfitUsdt: Double
+    /// 清仓后的本金净收益百分比。
+    let netReturnPct: Double
+    /// 两条 OHLC 路径中更大的最大权益回撤百分比。
+    let maxDrawdownPct: Double
+    /// 完成的逐格卖出次数，终止清仓不计入。
+    let completedCycles: Int
+    /// 双倍每边成本下较差路径的本金收益百分比。
+    let stressNetReturnPct: Double
 }
 
 /// 一次成功计算的不可变结果，同时持有展示模型和原始 JSON 供导出。

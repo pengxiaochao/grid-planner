@@ -1,10 +1,12 @@
 //! 命令行入口：合并配置、选择历史获取或网格生成，并保持 JSON 标准输出纯净。
 
+mod backtest;
 mod candles;
 mod config;
 mod data;
 mod input;
 mod model;
+mod optimizer;
 mod planner;
 mod precision;
 mod report;
@@ -39,7 +41,10 @@ fn run() -> Result<()> {
         }
         settings.validate(cli.live)?;
         let market = data::load(&settings, cli.live, &cli.api_base_url)?; // 本次数据加载的行情及规则快照。
-        let plan = planner::generate(&settings, market)?; // 经过全部约束检查的网格方案。
+        let plan = match settings.algorithm {
+            config::Algorithm::Classic => planner::generate(&settings, market)?,
+            config::Algorithm::Adaptive => optimizer::generate(&settings, market)?,
+        }; // 两种算法复用相同资金/交易约束，自适应另外保留收益与风险证据。
         if cli.json {
             format!("{}\n", serde_json::to_string_pretty(&plan)?)
         } else {

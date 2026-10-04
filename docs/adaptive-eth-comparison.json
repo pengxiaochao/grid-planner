@@ -1,0 +1,173 @@
+{
+  "symbol": "ETHUSDT",
+  "market_as_of_ms": 1791125299558,
+  "reference_price": 2693.12,
+  "closed_candle_count": 180,
+  "rules": {
+    "tick_size": "0.01000000",
+    "step_size": "0.00010000",
+    "min_notional": 5.0,
+    "min_qty": 0.0001,
+    "max_qty": 9000.0,
+    "min_price": 0.01,
+    "max_price": 1000000.0,
+    "max_notional": 9000000.0,
+    "max_orders": 200
+  },
+  "capital_usdt": 600.0,
+  "equity_usdt": 600.0,
+  "fee_pct": 0.1,
+  "slippage_pct": 0.05,
+  "optimization": {
+    "method": "anchored_walk_forward_v1",
+    "tested_candidates": 750,
+    "feasible_candidates": 4,
+    "selected_range_atr_mult": 2.25,
+    "selected_grids": 2,
+    "development_score": 0.8649706402038306,
+    "baseline_score": null,
+    "development_folds": [
+      {
+        "train_end_open_ms": 1780617600000,
+        "evaluation_start_open_ms": 1780704000000,
+        "evaluation_end_open_ms": 1783036800000,
+        "evaluated_bars": 28,
+        "candidate": {
+          "net_profit_usdt": 9.684890598409538,
+          "net_return_pct": 1.6141484330682563,
+          "max_drawdown_pct": 0.7566069066947272,
+          "completed_cycles": 1,
+          "trading_costs_usdt": 0.24315729588937635,
+          "stress_net_return_pct": 1.573529321384418,
+          "stress_max_drawdown_pct": 0.7556690965356219,
+          "path_returns_pct": [
+            1.6141484330682563,
+            1.6141484330682563
+          ],
+          "stop_triggered": false,
+          "take_triggered": false
+        },
+        "baseline": null,
+        "baseline_error": "无可行网格方案。2 格：最低网格订单仅 26.7226 USDT，需要至少 30.0000 USDT；资金或风险预算不足。请检查区间、资金、风险预算、单格金额与成本门槛；不要强制凑格数",
+        "buy_hold_return_pct": 1.27901626959901
+      },
+      {
+        "train_end_open_ms": 1783036800000,
+        "evaluation_start_open_ms": 1783123200000,
+        "evaluation_end_open_ms": 1785456000000,
+        "evaluated_bars": 28,
+        "candidate": {
+          "net_profit_usdt": 5.15320718496946,
+          "net_return_pct": 0.8588678641615767,
+          "max_drawdown_pct": 0.6583044526353898,
+          "completed_cycles": 1,
+          "trading_costs_usdt": 0.1539129805938267,
+          "stress_net_return_pct": 0.8331570119091225,
+          "stress_max_drawdown_pct": 0.6573947278496475,
+          "path_returns_pct": [
+            0.8588678641615767,
+            0.8588678641615767
+          ],
+          "stop_triggered": false,
+          "take_triggered": false
+        },
+        "baseline": {
+          "net_profit_usdt": 2.8531358981972517,
+          "net_return_pct": 0.47552264969954194,
+          "max_drawdown_pct": 0.5846861734146265,
+          "completed_cycles": 0,
+          "trading_costs_usdt": 0.13348029325872662,
+          "stress_net_return_pct": 0.45322489167013674,
+          "stress_max_drawdown_pct": 0.5838627914144847,
+          "path_returns_pct": [
+            0.47552264969954194,
+            0.47552264969954194
+          ],
+          "stop_triggered": false,
+          "take_triggered": false
+        },
+        "baseline_error": null,
+        "buy_hold_return_pct": 0.8287556812575357
+      },
+      {
+        "train_end_open_ms": 1785456000000,
+        "evaluation_start_open_ms": 1785542400000,
+        "evaluation_end_open_ms": 1787875200000,
+        "evaluated_bars": 28,
+        "candidate": {
+          "net_profit_usdt": 5.519545189330756,
+          "net_return_pct": 0.9199241982217927,
+          "max_drawdown_pct": 0.5005276805006327,
+          "completed_cycles": 1,
+          "trading_costs_usdt": 0.19682946462946752,
+          "stress_net_return_pct": 0.8869305369911633,
+          "stress_max_drawdown_pct": 0.4998673200314826,
+          "path_returns_pct": [
+            0.9199241982217927,
+            0.9199241982217927
+          ],
+          "stop_triggered": false,
+          "take_triggered": true
+        },
+        "baseline": {
+          "net_profit_usdt": 6.546317290193656,
+          "net_return_pct": 1.0910528816989427,
+          "max_drawdown_pct": 0.4429376593766686,
+          "completed_cycles": 1,
+          "trading_costs_usdt": 0.1762227992344917,
+          "stress_net_return_pct": 1.061483486479157,
+          "stress_max_drawdown_pct": 0.4423377214940947,
+          "path_returns_pct": [
+            1.0910528816989427,
+            1.0910528816989427
+          ],
+          "stop_triggered": false,
+          "take_triggered": true
+        },
+        "baseline_error": null,
+        "buy_hold_return_pct": 5.914598915006641
+      }
+    ],
+    "holdout": {
+      "train_end_open_ms": 1787875200000,
+      "evaluation_start_open_ms": 1787961600000,
+      "evaluation_end_open_ms": 1790985600000,
+      "evaluated_bars": 36,
+      "candidate": {
+        "net_profit_usdt": 10.098665645410392,
+        "net_return_pct": 1.683110940901732,
+        "max_drawdown_pct": 0.8102481563725924,
+        "completed_cycles": 2,
+        "trading_costs_usdt": 0.3453081568291706,
+        "stress_net_return_pct": 1.6254364227939582,
+        "stress_max_drawdown_pct": 0.8093789533271142,
+        "path_returns_pct": [
+          1.683110940901732,
+          1.683110940901732
+        ],
+        "stop_triggered": false,
+        "take_triggered": false
+      },
+      "baseline": {
+        "net_profit_usdt": 6.25666371751322,
+        "net_return_pct": 1.0427772862522033,
+        "max_drawdown_pct": 1.063897060658899,
+        "completed_cycles": 1,
+        "trading_costs_usdt": 0.16239826471722985,
+        "stress_net_return_pct": 1.0156032810625863,
+        "stress_max_drawdown_pct": 1.0624386975526712,
+        "path_returns_pct": [
+          1.0427772862522033,
+          1.0427772862522033
+        ],
+        "stop_triggered": false,
+        "take_triggered": false
+      },
+      "baseline_error": null,
+      "buy_hold_return_pct": 1.7016329867712758
+    },
+    "trend_efficiency": 0.22866347788275318,
+    "recommendation": "ready",
+    "reason": "发展验证与最终检验通过；历史优势不保证未来收益，创建前核对交易所预览。"
+  }
+}

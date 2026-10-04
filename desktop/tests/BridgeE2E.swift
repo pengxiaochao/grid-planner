@@ -22,7 +22,9 @@ struct BridgeE2E {
         try liveHistory(engine, api)
         try partialHistory(engine, api)
         try invalidHistory(engine, api)
-        print("desktop bridge E2E: 11 passed（表单 → 真实子进程 → HTTP/JSON → 显示/复制数据）")
+        try adaptive(engine, api)
+        try oldDraft()
+        print("desktop bridge E2E: 13 passed（表单 → 真实子进程 → HTTP/JSON → 显示/复制数据）")
     }
 
     /// 输入：无；返回：明确的离线示例表单，不保存或读取用户偏好。
@@ -30,6 +32,7 @@ struct BridgeE2E {
         var form = FormState() // 用例专属表单草稿，修改不污染用户 UserDefaults。
         form.live = false
         form.range = .percent
+        form.values["algorithm"] = "classic"
         form.values[FieldID.price.rawValue] = "84000"
         return form
     }
@@ -149,6 +152,7 @@ struct BridgeE2E {
     private static func liveHistory(_ engine: URL, _ api: String) throws {
         var form = FormState() // 用例专属表单草稿，修改不污染用户 UserDefaults。
         form.values[FieldID.historyBars.rawValue] = "30"
+        form.values["algorithm"] = "classic"
         let result = try EngineRunner(executable: engine).execute(arguments: form.arguments() + ["--api-base-url", api]) // 经真实子进程解码的结果，展示与导出都从此读取。
         try check(result.plan.history?.closedCandleCount == 30, "方案没有所选历史数据")
         try check(result.plan.atr == result.plan.history?.atr && result.plan.lowerPrice == "78000.00", "线位未使用真实历史 ATR")
@@ -173,5 +177,37 @@ struct BridgeE2E {
         } catch let error as AppFailure {
             try check(error.message.contains("history-bars"), "历史参数错误未传播")
         }
+    }
+
+    /// 输入：包内后端和测试 API；返回：无；自适应参数、指标解码、导出和观望复制提示一致。
+    private static func adaptive(_ engine: URL, _ api: String) throws {
+        var form = FormState()
+        form.values["algorithm"] = "adaptive"
+        form.values[FieldID.capital.rawValue] = "3000"
+        form.values[FieldID.equity.rawValue] = "15000"
+        form.values[FieldID.maxGrids.rawValue] = "24"
+        form.values[FieldID.minOrder.rawValue] = "10"
+        let result = try EngineRunner(executable: engine).execute(arguments: form.arguments() + ["--api-base-url", api + "/adaptive"])
+        let report = result.plan.optimization
+        try check(result.plan.algorithm == "adaptive" && report != nil, "自适应 JSON 未解码")
+        try check(report?.holdout.evaluatedBars == 36, "最终检验没有保留 20% 历史")
+        try check(result.plan.copyText().contains("最终检验"), "复制文本缺少历史证据")
+        let json = try JSONSerialization.jsonObject(with: result.json) as! [String: Any]
+        try check(json["optimization"] != nil, "导出丢失选参审计数据")
+        form.values[FieldID.historyBars.rawValue] = "60"
+        do {
+            _ = try EngineRunner(executable: engine).execute(arguments: form.arguments() + ["--api-base-url", api + "/adaptive"])
+            throw AppFailure(message: "短历史不能生成自适应方案")
+        } catch let error as AppFailure {
+            try check(error.message.contains("自适应"), "短历史错误没有传播")
+        }
+    }
+
+    /// 输入：无；返回：无；旧版表单 JSON 缺少算法字段时补默认值，不丢其他设置。
+    private static func oldDraft() throws {
+        let data = Data("{\"live\":true,\"range\":\"atr\",\"useProxy\":false,\"proxy\":\"http\",\"values\":{\"capital\":\"321\"}}".utf8)
+        let form = try JSONDecoder().decode(FormState.self, from: data)
+        try check(form.value(.capital) == "321", "升级丢失旧资金设置")
+        try check(form.arguments().contains("adaptive"), "旧草稿没有自适应默认值")
     }
 }

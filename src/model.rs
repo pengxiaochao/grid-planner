@@ -1,7 +1,7 @@
 //! 数据模型：在计算、JSON 导出和桌面端之间传递同一份带来源与时间的快照。
 
 use crate::candles::Candle;
-use crate::config::Settings;
+use crate::config::{Algorithm, Settings};
 use anyhow::{Context, Result, ensure};
 use serde::Serialize;
 
@@ -81,6 +81,8 @@ pub struct Market {
     pub market_as_of_ms: Option<u64>,
     /// 可选同批公开 OHLC 快照，供桌面图表及导出复算；离线不伪造历史。
     pub history: Option<History>,
+    /// 同批已校验 OHLC，供历史选参；离线 CSV 也保留，但不伪造公开 History。
+    pub candles: Vec<Candle>,
 }
 
 /// 可独立导出的历史快照；保存真实样本、ATR 与获取时间，方便图表展示及复算。
@@ -164,6 +166,10 @@ pub struct Plan {
     pub mode: String,
     /// 区间计算模型标识：percent、atr 或 manual。
     pub range_model: String,
+    /// classic 或 adaptive；算法与区间模型分别标记，避免把 ATR 当成收益优化。
+    pub algorithm: Algorithm,
+    /// 自适应发展段、旧策略对照及独立最终检验；经典模式为 None。
+    pub optimization: Option<crate::optimizer::OptimizationReport>,
     /// 用户允许投入的 USDT 上限，保留供界面核对。
     pub capital_limit_usdt: f64,
     /// 计算风险预算所用的账户总资产，单位 USDT。

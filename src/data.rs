@@ -1,7 +1,7 @@
 //! 数据层：只读取公开市场接口；显式选择离线来源，不用示例行情掩盖联网失败。
 
 use crate::candles::{Candle, read_csv, validate_series, wilder_atr};
-use crate::config::{RangeMode, Settings, interval_ms, positive};
+use crate::config::{Algorithm, RangeMode, Settings, interval_ms, positive};
 use crate::model::{History, Market, Rules};
 use anyhow::{Context, Result, ensure};
 use reqwest::blocking::Client;
@@ -24,6 +24,7 @@ pub fn load(settings: &Settings, live: bool, base_url: &str) -> Result<Market> {
         last_candle_open_ms: None,
         market_as_of_ms: None,
         history: None,
+        candles: Vec::new(),
     };
     if let Some(path) = &settings.candles {
         // 仅用户明确指定时读取本地 CSV；path 是输入文件路径。
@@ -70,11 +71,16 @@ fn load_live(settings: &Settings, base_url: &str) -> Result<Market> {
         last_candle_open_ms: None,
         market_as_of_ms: Some(now),
         history: None,
+        candles: Vec::new(),
     };
     if settings.mode == RangeMode::Atr || settings.history_bars.is_some() {
         let count = settings // 请求根数；未指定时至少取 100 根，留出 Wilder 平滑的预热样本。
             .history_bars
-            .unwrap_or((settings.atr_period * 5 + 1).clamp(100, 1000));
+            .unwrap_or(if settings.algorithm == Algorithm::Adaptive {
+                180.max(settings.atr_period * 5 + 1).min(1000)
+            } else {
+                (settings.atr_period * 5 + 1).clamp(100, 1000)
+            });
         let candles = request_candles(&client, base_url, settings, now, count)?; // 本次已校验的 OHLC 样本，后续 ATR 与历史展示复用同一批数据。
         attach_atr(
             &mut market,
@@ -302,5 +308,6 @@ fn attach_atr(
     market.closed_candle_count = candles.len();
     market.last_candle_open_ms = candles.last().map(|c| c.open_time);
     market.atr_source = Some(source.into());
+    market.candles = candles.to_vec();
     Ok(())
 }

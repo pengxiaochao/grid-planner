@@ -1,6 +1,6 @@
 //! 网格核心：先定线位，再按双边成本、统一数量、账户风险及交易精度搜索可行格数。
 
-use crate::config::{RangeMode, Settings, positive};
+use crate::config::{Algorithm, RangeMode, Settings, positive};
 use crate::model::{Market, Plan};
 use crate::precision::{Direction, Step};
 use anyhow::{Context, Result, bail, ensure};
@@ -65,7 +65,7 @@ pub fn generate(settings: &Settings, market: Market) -> Result<Plan> {
         // n 是本轮候选段数；首个可行值就是搜索顺序中的最大值。
         match candidate(settings, &market, &range, n, &price_step, &qty_step) {
             Ok(candidate) => {
-                return build_plan(settings, market, range, candidate, &price_step, &qty_step);
+                return build_plan(settings, market, range, candidate, (&price_step, &qty_step));
             }
             Err(error) => last_error = format!("{n} 格：{error}"),
         }
@@ -271,26 +271,27 @@ fn build_plan(
     market: Market,
     range: Range,
     c: Candidate,
-    tick: &Step,
-    step: &Step,
+    steps: (&Step, &Step),
 ) -> Result<Plan> {
-    let warnings = warnings(s, &market); // 与当前模型和数据来源对应的执行边界，随 JSON 一起导出。
-    let grid_prices: Result<Vec<_>> = c.prices.iter().map(|p| tick.text(*p)).collect(); // 将已取整价格转为固定小数位字符串，任一格式错误使整个方案失败。
+    let grid_prices: Result<Vec<_>> = c.prices.iter().map(|p| steps.0.text(*p)).collect(); // steps 依次为价格及数量精度；转换失败使整份方案失败。
     Ok(Plan {
+        warnings: warnings(s, &market),
         symbol: s.symbol.clone(),
         mode: "geometric".into(),
         range_model: format!("{:?}", s.mode).to_lowercase(),
+        algorithm: Algorithm::Classic,
+        optimization: None,
         capital_limit_usdt: s.capital,
         account_equity_usdt: s.equity.unwrap_or(s.capital),
         investment_usdt: c.investment,
         unallocated_usdt: s.capital - c.investment,
         reference_price: market.price,
-        lower_price: tick.text(range.lower)?,
-        upper_price: tick.text(range.upper)?,
-        stop_loss: tick.text(range.stop)?,
-        take_profit: tick.text(range.take)?,
+        lower_price: steps.0.text(range.lower)?,
+        upper_price: steps.0.text(range.upper)?,
+        stop_loss: steps.0.text(range.stop)?,
+        take_profit: steps.0.text(range.take)?,
         grid_count: c.prices.len() - 1,
-        quantity_per_grid: step.text(c.qty)?,
+        quantity_per_grid: steps.1.text(c.qty)?,
         grid_prices: grid_prices?,
         initial_base_quantity_estimate: c.initial_base,
         fee_reserve_usdt: c.reserve,
@@ -312,7 +313,6 @@ fn build_plan(
         last_candle_open_ms: market.last_candle_open_ms,
         market_as_of_ms: market.market_as_of_ms,
         rules: market.rules,
-        warnings,
         history: market.history,
     })
 }

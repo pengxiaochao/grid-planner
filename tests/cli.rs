@@ -412,6 +412,309 @@ fn ok_response(path: &str) -> (u16, Value) {
     (200, market_response(path))
 }
 
+/// 输入：临时目录、根数及场景；返回：仅供 E2E 的连续震荡/下跌/跳空日线 CSV。
+fn adaptive_candles(dir: &TempDir, count: usize, scenario: &str) -> std::path::PathBuf {
+    let path = dir.path().join(format!("adaptive-{scenario}.csv"));
+    let mut csv = "open_time,open,high,low,close\n".to_owned();
+    let mut previous = 84000.0_f64;
+    for i in 0..count {
+        let wave = 3000.0 * (i as f64 * std::f64::consts::TAU / 12.0).sin();
+        let close = match scenario {
+            "flat" => 84000.0,
+            "down" => 84000.0 - i as f64 * 180.0,
+            "gap" if i >= count * 4 / 5 => 50000.0,
+            "tail" if i >= count * 4 / 5 => 84000.0 + wave * 0.8,
+            _ => 84000.0 + wave,
+        };
+        let open = if scenario == "gap" && i == count * 4 / 5 {
+            close
+        } else {
+            previous
+        };
+        csv.push_str(&format!(
+            "{},{open},{},{},{close}\n",
+            1_700_000_000_000_u64 + i as u64 * 86_400_000,
+            open.max(close) + 1200.0,
+            open.min(close) - 1200.0
+        ));
+        previous = close;
+    }
+    std::fs::write(&path, csv).unwrap();
+    path
+}
+
+/// 输入：CSV 路径与额外参数；返回：真实 CLI 的自适应方案，复用既有 JSON 及资金断言。
+fn adaptive_plan(path: &std::path::Path, extra: &[&str]) -> Value {
+    let mut args = vec![
+        "--algorithm",
+        "adaptive",
+        "--mode",
+        "atr",
+        "--candles",
+        path.to_str().unwrap(),
+        "--capital",
+        "3000",
+        "--equity",
+        "15000",
+        "--min-order-usdt",
+        "10",
+        "--max-grids",
+        "24",
+    ];
+    args.extend_from_slice(extra);
+    let p = plan(&args);
+    check_invariants(&p);
+    p
+}
+
+/// 输入：无；返回：无；新版具有旧版对照、独立最终检验和可复算时间界限。
+#[test]
+fn adaptive_compares_costed_returns_without_relaxing_constraints() {
+    let dir = TempDir::new().unwrap();
+    let p = adaptive_plan(&adaptive_candles(&dir, 180, "wave"), &[]);
+    assert_eq!(p["algorithm"], "adaptive");
+    let o = &p["optimization"];
+    assert_eq!(o["development_folds"].as_array().unwrap().len(), 3);
+    assert_eq!(o["holdout"]["evaluated_bars"], 36);
+    assert!(o["feasible_candidates"].as_u64().unwrap() > 1);
+    assert!(
+        o["development_score"].as_f64().unwrap() + 1e-9 >= o["baseline_score"].as_f64().unwrap()
+    );
+    assert!(
+        o["holdout"]["candidate"]["trading_costs_usdt"]
+            .as_f64()
+            .unwrap()
+            > 0.0
+    );
+    assert!(
+        o["holdout"]["candidate"]["net_return_pct"]
+            .as_f64()
+            .unwrap()
+            .is_finite()
+    );
+    assert!(
+        o["holdout"]["candidate"]["stress_net_return_pct"]
+            .as_f64()
+            .unwrap()
+            <= o["holdout"]["candidate"]["net_return_pct"]
+                .as_f64()
+                .unwrap()
+                + 1e-9
+    );
+    let last = &o["development_folds"][2];
+    assert!(
+        last["evaluation_end_open_ms"].as_u64().unwrap()
+            < o["holdout"]["evaluation_start_open_ms"].as_u64().unwrap()
+    );
+}
+
+/// 输入：无；返回：无；修改未参与选参的尾部不会改变参数或发展段指标。
+#[test]
+fn adaptive_holdout_cannot_influence_parameter_selection() {
+    let dir = TempDir::new().unwrap();
+    let a = adaptive_plan(&adaptive_candles(&dir, 180, "wave"), &[]);
+    let b = adaptive_plan(&adaptive_candles(&dir, 180, "tail"), &[]);
+    for field in [
+        "selected_range_atr_mult",
+        "selected_grids",
+        "development_score",
+        "development_folds",
+    ] {
+        assert_eq!(
+            a["optimization"][field], b["optimization"][field],
+            "{field}"
+        );
+    }
+    assert_ne!(a["optimization"]["holdout"], b["optimization"]["holdout"]);
+}
+
+/// 输入：无；返回：无；固定格数被每段验证及最终方案尊重，不被自动替换。
+#[test]
+fn adaptive_preserves_explicit_grid_count() {
+    let dir = TempDir::new().unwrap();
+    let p = adaptive_plan(&adaptive_candles(&dir, 180, "wave"), &["--grids", "4"]);
+    assert_eq!(p["grid_count"], 4);
+    assert_eq!(p["optimization"]["selected_grids"], 4);
+}
+
+/// 输入：无；返回：无；单边下跌输出观望、库存亏损及原因。
+#[test]
+fn adaptive_declining_market_does_not_claim_profit() {
+    let dir = TempDir::new().unwrap();
+    let p = adaptive_plan(&adaptive_candles(&dir, 180, "down"), &["--price", "51780"]);
+    assert_eq!(p["optimization"]["recommendation"], "wait");
+    assert!(!p["optimization"]["reason"].as_str().unwrap().is_empty());
+    assert!(
+        p["optimization"]["holdout"]["candidate"]["net_profit_usdt"]
+            .as_f64()
+            .unwrap()
+            < 0.0
+    );
+}
+
+/// 输入：无；返回：无；跳空止损不会伪造按 SL 成交或忽略库存亏损。
+#[test]
+fn adaptive_gap_exit_can_exceed_the_scenario_budget() {
+    let dir = TempDir::new().unwrap();
+    let p = adaptive_plan(&adaptive_candles(&dir, 180, "gap"), &[]);
+    let metrics = &p["optimization"]["holdout"]["candidate"];
+    assert_eq!(metrics["stop_triggered"], true);
+    assert!(metrics["net_profit_usdt"].as_f64().unwrap() < -300.0);
+    assert_eq!(p["optimization"]["recommendation"], "wait");
+}
+
+/// 输入：无；返回：无；无成交时双边建仓/清仓成本按完整库存独立核算，并建议观望。
+#[test]
+fn adaptive_no_cycles_accounts_for_initial_and_exit_costs() {
+    let dir = TempDir::new().unwrap();
+    let p = adaptive_plan(&adaptive_candles(&dir, 180, "flat"), &["--max-grids", "2"]);
+    let m = &p["optimization"]["holdout"]["candidate"];
+    let base = p["initial_base_quantity_estimate"].as_f64().unwrap();
+    let cost = p["effective_cost_per_side_pct"].as_f64().unwrap() / 100.0;
+    let loss = base * 84000.0 * cost * 2.0;
+    assert_eq!(m["completed_cycles"], 0);
+    assert!((m["net_profit_usdt"].as_f64().unwrap() + loss).abs() < 1e-7);
+    assert!((m["trading_costs_usdt"].as_f64().unwrap() - loss).abs() < 1e-7);
+    assert_eq!(p["optimization"]["recommendation"], "wait");
+}
+
+/// 输入：公开请求路径；返回：180 根震荡日线与未收盘极端线，复用既有过滤器。
+fn adaptive_response(path: &str) -> (u16, Value) {
+    if !path.starts_with("/api/v3/klines") {
+        return ok_response(path);
+    }
+    let rows: Vec<_> = (0..=180)
+        .map(|i| {
+            let start = 2_000_000_000_000_u64 - (180 - i) * 86_400_000;
+            let open = 84000.0 + 3000.0 * ((i as f64 - 1.0) * std::f64::consts::TAU / 12.0).sin();
+            let close = 84000.0 + 3000.0 * (i as f64 * std::f64::consts::TAU / 12.0).sin();
+            json!([
+                start,
+                open.to_string(),
+                if i == 180 {
+                    "999999".into()
+                } else {
+                    (open.max(close) + 1200.0).to_string()
+                },
+                (open.min(close) - 1200.0).to_string(),
+                close.to_string(),
+                "10",
+                start + 86_400_000 - 1
+            ])
+        })
+        .collect();
+    (200, json!(rows))
+}
+
+/// 输入：无；返回：无；真实 HTTP 历史驱动自适应算法，未收盘线不能污染选参。
+#[test]
+fn adaptive_live_uses_only_the_attached_closed_history() {
+    let (url, handle) = server(adaptive_response, 4);
+    let o = run(&[
+        "--capital",
+        "3000",
+        "--equity",
+        "15000",
+        "--live",
+        "--mode",
+        "atr",
+        "--algorithm",
+        "adaptive",
+        "--history-bars",
+        "180",
+        "--max-grids",
+        "24",
+        "--min-order-usdt",
+        "10",
+        "--api-base-url",
+        &url,
+        "--json",
+    ]);
+    handle.join().unwrap();
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    let p: Value = serde_json::from_slice(&o.stdout).unwrap();
+    assert_eq!(p["closed_candle_count"], 180);
+    assert_eq!(p["history"]["closed_candle_count"], 180);
+    assert_eq!(p["optimization"]["holdout"]["evaluated_bars"], 36);
+    assert!(
+        p["history"]["candles"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|c| c["high"].as_f64().unwrap() < 90000.0)
+    );
+    check_invariants(&p);
+}
+
+/// 输入：无；返回：无；缺历史、短历史、绝对停止价或非 ATR 模式明确失败。
+#[test]
+fn adaptive_rejects_unsupported_or_insufficient_evidence() {
+    let dir = TempDir::new().unwrap();
+    let short = adaptive_candles(&dir, 60, "short");
+    let full = adaptive_candles(&dir, 180, "wave");
+    let cases = [
+        vec!["--mode", "percent"],
+        vec!["--mode", "atr", "--atr", "2000"],
+        vec!["--mode", "atr", "--candles", short.to_str().unwrap()],
+        vec![
+            "--mode",
+            "atr",
+            "--candles",
+            full.to_str().unwrap(),
+            "--stop-loss",
+            "50000",
+        ],
+        vec![
+            "--mode",
+            "atr",
+            "--candles",
+            full.to_str().unwrap(),
+            "--take-profit",
+            "100000",
+        ],
+    ];
+    for extra in cases {
+        let mut args = vec![
+            "--capital",
+            "3000",
+            "--price",
+            "84000",
+            "--algorithm",
+            "adaptive",
+            "--json",
+        ];
+        args.extend(extra);
+        let o = run(&args);
+        assert!(!o.status.success());
+        assert!(o.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&o.stderr).contains("自适应"));
+    }
+}
+
+/// 输入：无；返回：无；自适应 TOML/CLI 覆盖及 JSON 文件和 stdout 字节一致。
+#[test]
+fn adaptive_config_export_preserves_the_full_audit() {
+    let dir = TempDir::new().unwrap();
+    adaptive_candles(&dir, 180, "wave");
+    let config = dir.path().join("adaptive.toml");
+    let output = dir.path().join("adaptive.json");
+    std::fs::write(&config, "capital=3000\nequity=15000\nprice=84000\nmode='atr'\nalgorithm='classic'\ncandles='adaptive-wave.csv'\nmax_grids=24\nmin_order_usdt=10\n").unwrap();
+    let o = run(&[
+        "--config",
+        config.to_str().unwrap(),
+        "--algorithm",
+        "adaptive",
+        "--json",
+        "--output",
+        output.to_str().unwrap(),
+    ]);
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    assert_eq!(std::fs::read(output).unwrap(), o.stdout);
+    let p: Value = serde_json::from_slice(&o.stdout).unwrap();
+    assert_eq!(p["algorithm"], "adaptive");
+    assert!(p["optimization"]["holdout"]["baseline"].is_object());
+}
+
 /// 输入：请求路径（忽略）；返回：HTTP 429 响应。
 fn rate_limited(_: &str) -> (u16, Value) {
     (429, json!({"msg": "Too many requests"}))

@@ -53,7 +53,7 @@ struct PlannerView: View {
             }
             if let notice = model.notice { Text(notice).font(.caption).foregroundStyle(.secondary) } // notice 是复制/取消等操作的完成消息。
             Spacer()
-            Button("复制填写参数", action: model.copy).disabled(model.result == nil)
+            Button("复制填写参数", action: model.copy).disabled(model.result?.plan.isActionable != true)
             Button("导出 JSON", action: model.export).disabled(model.result == nil)
         }.padding(16)
     }
@@ -108,6 +108,14 @@ struct FormPane: View {
     /// 输入：当前区间模型；返回：该模型专用参数，隐藏字段不传到错误模式。
     private var strategy: some View {
         VStack(alignment: .leading, spacing: 11) {
+            Picker("选参算法", selection: binding(.algorithm)) {
+                Text("自适应 · 历史验证").tag("adaptive")
+                Text("经典 · 最多可行格数").tag("classic")
+            }.accessibilityIdentifier("algorithm")
+            Text(model.form.value(.algorithm) == "adaptive"
+                 ? "自适应需要联网 ATR 历史、至少 120 根。程序比较区间宽度和格数；证据不足会建议观望，SL/TP 请使用 ATR 倍数。"
+                 : "经典算法按资金和风险约束选择最多格数，支持手动输入。")
+                .font(.caption).foregroundStyle(.secondary)
             Picker("区间模型", selection: $model.form.range) {
                 ForEach(RangeChoice.allCases, id: \.self) { Text($0.title).tag($0) }
             }.pickerStyle(.segmented).labelsHidden()
@@ -285,6 +293,7 @@ struct ResultPane: View {
                 Text("现货 · 等比").font(.caption).foregroundStyle(.secondary)
             }
             Text("参考现价 \(p.referencePrice) USDT").font(.caption).foregroundStyle(.secondary)
+            if let audit = p.optimization { optimization(audit) }
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                 ValueCard(title: "区间下限", value: p.lowerPrice, tint: .blue)
                 ValueCard(title: "区间上限", value: p.upperPrice, tint: .blue)
@@ -326,6 +335,31 @@ struct ResultPane: View {
                 metric("数据来源", p.dataSource == "binance_public_api" ? "币安公开行情" : "手动填写")
                 Text("以完整成交及假设成本计算，实际亏损可能超过预算。创建前核对币安预览。")
                     .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+            }.padding(8)
+        }
+    }
+
+    /// 输入：后端选参审计；返回：判定、独立最终检验及经典/买入持有对照，收益按总本金计算。
+    private func optimization(_ report: OptimizationData) -> some View {
+        GroupBox(report.recommendation == "wait" ? "建议观望 · 下方参数仅供诊断" : "自适应 · 历史门槛通过") {
+            VStack(alignment: .leading, spacing: 10) {
+                metric("区间 ATR 倍数 / 可行候选", "\(money(report.selectedRangeAtrMult)) / \(report.feasibleCandidates)")
+                metric("发展验证 / 风险调整评分", "\(report.developmentFolds.count) 段 / \(money(report.developmentScore))")
+                metric("最终检验", "\(report.holdout.evaluatedBars) 根（未参与选参）")
+                Text("\(timestamp(report.holdout.evaluationStartOpenMs)) — \(timestamp(report.holdout.evaluationEndOpenMs))")
+                    .font(.caption).foregroundStyle(.secondary)
+                metric("最终检验本金净收益", "\(money(report.holdout.candidate.netReturnPct))%")
+                metric("最大权益回撤", "\(money(report.holdout.candidate.maxDrawdownPct))%")
+                metric("双倍成本本金净收益", "\(money(report.holdout.candidate.stressNetReturnPct))%")
+                metric("完成网格卖出", "\(report.holdout.candidate.completedCycles) 次")
+                if let baseline = report.holdout.baseline {
+                    metric("经典算法同段净收益", "\(money(baseline.netReturnPct))%")
+                }
+                metric("同额投入买入持有", "\(money(report.holdout.buyHoldReturnPct))%")
+                Text(report.reason).font(.caption)
+                    .foregroundStyle(report.recommendation == "wait" ? .orange : .secondary)
+                Text("历史检验不能保证未来收益。买入持有的风险敞口与网格不同。")
+                    .font(.caption).foregroundStyle(.secondary)
             }.padding(8)
         }
     }

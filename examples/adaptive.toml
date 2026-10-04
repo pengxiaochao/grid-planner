@@ -1,0 +1,18 @@
+# V0.3 真实历史自适应选参；运行 cargo run --locked -- --config examples/adaptive.toml --live。
+# 账户资产应填写真实值；示例不代表建议投入，不设置绝对 SL/TP。
+capital = 600
+symbol = "BTCUSDT"
+mode = "atr"
+algorithm = "adaptive"
+interval = "1d"
+history_bars = 180
+atr_period = 14
+range_atr_mult = 3
+stop_atr_mult = 1.5
+take_atr_mult = 1.5
+risk_pct = 2
+fee_pct = 0.1
+slippage_pct = 0.05
+min_order_usdt = 30
+min_net_pct = 0.3
+max_grids = 150

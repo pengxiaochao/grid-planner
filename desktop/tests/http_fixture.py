@@ -1,6 +1,7 @@
 """桌面端到端测试用公开 API 服务；合成数据只用于验收，应用不会调用它。"""
 
 import json
+import math
 import subprocess
 import sys
 import threading
@@ -37,6 +38,8 @@ class PublicMarket(BaseHTTPRequestHandler):
                 start = 2_000_000_000_000 - (100 - i) * 86_400_000  # 固定模拟时间，确保测试可重现。
                 value.append([start, "84000", "999999" if i == 100 else "85000",
                     "83000", "84000", "10", start + 86_400_000 - 1])
+            if path.path.startswith("/adaptive/"):
+                value = self.adaptive_klines()
         else:
             self.errors.append(f"不允许的公开端点：{path.path}")
             value = {}
@@ -49,6 +52,18 @@ class PublicMarket(BaseHTTPRequestHandler):
 
     def log_message(self, _format, *_args):
         """输入：服务器日志参数；返回：无，避免用逐请求日志淹没验收结果。"""
+
+    def adaptive_klines(self):
+        """输入：测试请求；返回：180 根震荡已收盘线及一根极端未收盘线，不访问真实账户。"""
+        rows = []
+        for i in range(181):
+            start = 2_000_000_000_000 - (180 - i) * 86_400_000
+            opening = 84000 + 3000 * math.sin((i - 1) * math.tau / 12)
+            closing = 84000 + 3000 * math.sin(i * math.tau / 12)
+            high = 999999 if i == 180 else max(opening, closing) + 1200
+            rows.append([start, str(opening), str(high), str(min(opening, closing) - 1200),
+                         str(closing), "10", start + 86_400_000 - 1])
+        return rows
 
 
 def main():

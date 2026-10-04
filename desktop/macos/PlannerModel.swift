@@ -98,7 +98,7 @@ final class PlannerModel: ObservableObject {
 
     /// 输入：当前结果；返回：无；只在用户点击复制时修改剪贴板。
     func copy() {
-        guard let result else { return } // 无成功方案时不操作剪贴板或导出文件。
+        guard let result, result.plan.isActionable else { return } // 观望方案不能复制为可执行填写参数。
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(result.plan.copyText(), forType: .string)
         notice = "已复制币安填写参数。"

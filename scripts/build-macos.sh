@@ -11,6 +11,7 @@ prepare() {
     APP_ARCH="$(uname -m)" # 原生 CPU 架构；GitHub 为 arm64/x86_64 分别选择构建机器。
     ARCHIVE_NAME="GridPlanner-macOS-$APP_ARCH.zip" # 下载文件名标明架构，避免选错安装包。
     export MACOSX_DEPLOYMENT_TARGET=13.0 # Rust 与 Swift 使用相同最低系统目标，不依赖构建机当前版本。
+    export CARGO_TARGET_DIR="$PROJECT_DIR/target" # 与后续复制路径一致，不受个人全局编译目录影响。
     mkdir -p "$APP_STAGE/Contents/MacOS" "$APP_STAGE/Contents/Resources" "$PROJECT_DIR/dist"
     cd "$PROJECT_DIR"
 }

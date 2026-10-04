@@ -7,7 +7,7 @@ use std::path::Path;
 
 /// 一根 OHLC K 线；开盘时间按 Unix 毫秒保存，价格按报价币 USDT 计。
 /// 结构自身不假定已经收盘，调用方还须依据服务器时间筛选。
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct Candle {
     /// Unix 开盘毫秒；用于排序、查重及检测缺失周期。
     pub open_time: u64,
