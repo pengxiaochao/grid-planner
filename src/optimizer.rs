@@ -2,7 +2,7 @@
 
 use crate::backtest::{self, BacktestMetrics};
 use crate::candles::{Candle, wilder_atr};
-use crate::config::{Algorithm, Settings};
+use crate::config::{Algorithm, Settings, interval_ms};
 use crate::model::{Market, Plan};
 use anyhow::{Context, Result, ensure};
 use serde::Serialize;
@@ -27,6 +27,10 @@ pub struct FoldEvaluation {
     pub evaluation_end_open_ms: u64,
     /// 本段实际回放根数，未发生未来数据重用。
     pub evaluated_bars: usize,
+    /// 实际成交回放根数；细周期时大于 ATR 根数。
+    pub replayed_bars: usize,
+    /// A 净收益减同额持有净收益的百分点，保留负值。
+    pub excess_return_pct_points: f64,
     /// 当前候选策略的清算净收益、成本和回撤。
     pub candidate: BacktestMetrics,
     /// 原设置对应旧策略的同段回放，历史资金不可行时为 None。
@@ -35,6 +39,8 @@ pub struct FoldEvaluation {
     pub baseline_error: Option<String>,
     /// 与候选投入相同的买入持有本金收益，风险敞口不等同于网格。
     pub buy_hold_return_pct: f64,
+    /// 同一 A 组参数下的预声明趋势底仓 B 组与完整持有基准，不参与 A 的选参。
+    pub ab_test: crate::experiment::Comparison,
 }
 
 /// 可随方案导出的完整选参审计，最后 20% 历史从未进入选参评分。
@@ -42,6 +48,10 @@ pub struct FoldEvaluation {
 pub struct OptimizationReport {
     /// 本版可复算的方法标识。
     pub method: String,
+    /// ATR 指标周期与成交周期分别报告，粗周期模式仍有路径假设。
+    pub execution_interval: String,
+    /// 每个窗口仅用其之前的历史独立选参，不可行窗口保留错误。
+    pub rolling_validation: Vec<RollingEvaluation>,
     /// 搜索的全部预声明参数组合数。
     pub tested_candidates: usize,
     /// 在全部发展段满足交易、资金和风险约束的组合数。
@@ -135,6 +145,7 @@ fn prefix_market(s: &Settings, market: &Market, prefix: &[Candle]) -> Result<Mar
         closed_candle_count: prefix.len(),
         last_candle_open_ms: Some(last.open_time),
         market_as_of_ms: None,
+        execution: None,
         history: None,
         candles: Vec::new(),
     })
@@ -153,15 +164,26 @@ fn evaluate_fold(
     let forward = &candles[start..end];
     let settings = policy_settings(s, policy);
     let plan = crate::planner::generate(&settings, prefix_market(s, market, prefix)?)?;
+    let replay = crate::execution::window(
+        forward,
+        market.execution.as_ref(),
+        interval_ms(&s.interval)?,
+    );
+    let candidate = backtest::evaluate(&plan, replay)?;
+    let ab_test = crate::experiment::compare(&plan, prefix, replay, &candidate)?;
+    let buy_hold_return_pct = backtest::buy_hold_return(&plan, forward[forward.len() - 1].close);
     Ok(FoldEvaluation {
         train_end_open_ms: candles[start - 1].open_time,
         evaluation_start_open_ms: forward[0].open_time,
         evaluation_end_open_ms: forward[forward.len() - 1].open_time,
         evaluated_bars: forward.len(),
-        candidate: backtest::evaluate(&plan, forward)?,
+        replayed_bars: replay.len(),
+        excess_return_pct_points: candidate.net_return_pct - buy_hold_return_pct,
+        candidate,
+        ab_test,
         baseline: None,
         baseline_error: None,
-        buy_hold_return_pct: backtest::buy_hold_return(&plan, forward[forward.len() - 1].close),
+        buy_hold_return_pct,
     })
 }
 
@@ -325,7 +347,12 @@ fn audit(
     let (efficiency, declining) = trend(&market.candles);
     let (recommendation, reason) = recommendation(best, &holdout, declining);
     Ok(OptimizationReport {
-        method: "anchored_walk_forward_v1".into(),
+        method: "pressure_budget_walk_forward_v2".into(),
+        execution_interval: s
+            .replay_interval
+            .clone()
+            .unwrap_or_else(|| s.interval.clone()),
+        rolling_validation: rolling(s, market),
         tested_candidates: tested,
         feasible_candidates: feasible,
         selected_range_atr_mult: best.policy.multiplier,
@@ -367,4 +394,67 @@ pub fn generate(s: &Settings, market: Market) -> Result<Plan> {
     plan.warnings.push("历史回放假设限价完整成交、建仓按此前收盘价及给定成本执行；K 线内顺序、排队和真实滑点无法由 OHLC 证明。".into());
     plan.optimization = Some(report);
     Ok(plan)
+}
+
+/// 一个独立重新选参的滚动样本外窗口，失败窗口不能被当成零收益。
+#[derive(Debug, Serialize)]
+pub struct RollingEvaluation {
+    /// 该窗口开始前已知的历史根数。
+    pub training_bars: usize,
+    /// 待验证窗口首根开盘毫秒，失败时也可定位。
+    pub evaluation_start_open_ms: u64,
+    /// 待验证窗口末根开盘毫秒。
+    pub evaluation_end_open_ms: u64,
+    /// 本窗口只用训练前缀独立选出的区间倍数。
+    pub selected_range_atr_mult: Option<f64>,
+    /// 独立选出的格数政策，空值也可能表示最多可行格数政策。
+    pub selected_grids: Option<usize>,
+    /// 成功窗口的 A/B、持有、回撤与成本；失败时为空。
+    pub evaluation: Option<FoldEvaluation>,
+    /// 选参或验证不可行时的真实原因，不参与收益汇总。
+    pub error: Option<String>,
+}
+
+/// 输入：设置与完整快照；返回：最多三个不重叠前推窗口，历史不足时为空，不读取窗口后的数据选参。
+fn rolling(s: &Settings, market: &Market) -> Vec<RollingEvaluation> {
+    let n = market.candles.len();
+    let minimum = 120.max(((60.max(s.atr_period + 1) + 30) * 5).div_ceil(4));
+    if n < minimum + 30 {
+        return Vec::new();
+    }
+    let width = (n - minimum) / 3;
+    (0..3)
+        .map(|i| {
+            let start = minimum + i * width;
+            let end = if i == 2 { n } else { start + width };
+            let result = rolling_fold(s, market, start, end);
+            let (policy, evaluation, error) = match result {
+                Ok((policy, fold)) => (Some(policy), Some(fold), None),
+                Err(error) => (None, None, Some(format!("{error:#}"))),
+            };
+            RollingEvaluation {
+                training_bars: start,
+                evaluation_start_open_ms: market.candles[start].open_time,
+                evaluation_end_open_ms: market.candles[end - 1].open_time,
+                selected_range_atr_mult: policy.map(|p| p.multiplier),
+                selected_grids: policy.and_then(|p| p.grids),
+                evaluation,
+                error,
+            }
+        })
+        .collect()
+}
+
+/// 输入：设置、快照与窗口界限；返回：仅从该窗口之前的发展段选出的政策及其前推结果。
+fn rolling_fold(
+    s: &Settings,
+    market: &Market,
+    start: usize,
+    end: usize,
+) -> Result<(Policy, FoldEvaluation)> {
+    let prefix = &market.candles[..start];
+    let development = splits(s, prefix)?;
+    let (best, _, _) = select(s, market, prefix, &development[..3])?;
+    let evaluation = evaluate_fold(s, market, &market.candles, (start, end), best.policy)?;
+    Ok((best.policy, evaluation))
 }

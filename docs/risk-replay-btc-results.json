@@ -1,0 +1,637 @@
+{
+  "symbol": "BTCUSDT",
+  "mode": "geometric",
+  "range_model": "atr",
+  "algorithm": "adaptive",
+  "optimization": {
+    "method": "pressure_budget_walk_forward_v2",
+    "execution_interval": "1h",
+    "rolling_validation": [
+      {
+        "training_bars": 120,
+        "evaluation_start_open_ms": 1787184000000,
+        "evaluation_end_open_ms": 1788825600000,
+        "selected_range_atr_mult": 2.25,
+        "selected_grids": 16,
+        "evaluation": {
+          "train_end_open_ms": 1787097600000,
+          "evaluation_start_open_ms": 1787184000000,
+          "evaluation_end_open_ms": 1788825600000,
+          "evaluated_bars": 20,
+          "replayed_bars": 480,
+          "excess_return_pct_points": -10.979466748271221,
+          "candidate": {
+            "net_profit_usdt": 11.36670300265564,
+            "net_return_pct": 1.7144348420295084,
+            "max_drawdown_pct": 0.9294055695833265,
+            "completed_cycles": 13,
+            "trading_costs_usdt": 1.6799920441212393,
+            "stress_net_return_pct": 1.4604561356520234,
+            "stress_max_drawdown_pct": 0.9833983119129907,
+            "path_returns_pct": [
+              1.8405672378666131,
+              1.7144348420295084
+            ],
+            "stop_triggered": false,
+            "take_triggered": true
+          },
+          "baseline": null,
+          "baseline_error": null,
+          "buy_hold_return_pct": 12.69390159030073,
+          "ab_test": {
+            "strategy": "trend_core_v1",
+            "uptrend_signal": true,
+            "core_slots": 3,
+            "core_base_quantity": 0.00171,
+            "b": {
+              "net_profit_usdt": 15.509271351555753,
+              "net_return_pct": 2.3392566141109734,
+              "max_drawdown_pct": 0.9294055695833265,
+              "completed_cycles": 5,
+              "trading_costs_usdt": 1.071583295221239,
+              "stress_net_return_pct": 2.17704393320854,
+              "stress_max_drawdown_pct": 0.9833983119129907,
+              "path_returns_pct": [
+                2.4017155737489873,
+                2.3392566141109734
+              ],
+              "stop_triggered": false,
+              "take_triggered": true
+            },
+            "buy_hold": {
+              "net_profit_usdt": 84.16056754369367,
+              "net_return_pct": 12.693901590300705,
+              "max_drawdown_pct": 6.348127216049214,
+              "completed_cycles": 0,
+              "trading_costs_usdt": 2.096474929661106,
+              "stress_net_return_pct": 12.35918018989092,
+              "stress_max_drawdown_pct": 6.347971823695209,
+              "path_returns_pct": [
+                12.693901590300705,
+                12.693901590300705
+              ],
+              "stop_triggered": false,
+              "take_triggered": false
+            },
+            "return_delta_pct_points": 0.624821772081465,
+            "excess_return_pct_points": -10.354644976189732
+          }
+        },
+        "error": null
+      },
+      {
+        "training_bars": 140,
+        "evaluation_start_open_ms": 1788912000000,
+        "evaluation_end_open_ms": 1790553600000,
+        "selected_range_atr_mult": 3.0,
+        "selected_grids": 16,
+        "evaluation": {
+          "train_end_open_ms": 1788825600000,
+          "evaluation_start_open_ms": 1788912000000,
+          "evaluation_end_open_ms": 1790553600000,
+          "evaluated_bars": 20,
+          "replayed_bars": 480,
+          "excess_return_pct_points": -2.4110657565718974,
+          "candidate": {
+            "net_profit_usdt": 22.626011767276736,
+            "net_return_pct": 3.412671458111122,
+            "max_drawdown_pct": 3.1973396832274403,
+            "completed_cycles": 34,
+            "trading_costs_usdt": 4.324464120132912,
+            "stress_net_return_pct": 2.7600009163402826,
+            "stress_max_drawdown_pct": 3.3561406084985577,
+            "path_returns_pct": [
+              3.412671458111122,
+              3.4148062510145993
+            ],
+            "stop_triggered": false,
+            "take_triggered": false
+          },
+          "baseline": null,
+          "baseline_error": null,
+          "buy_hold_return_pct": 5.823737214683019,
+          "ab_test": {
+            "strategy": "trend_core_v1",
+            "uptrend_signal": true,
+            "core_slots": 3,
+            "core_base_quantity": 0.00147,
+            "b": {
+              "net_profit_usdt": 19.481196248326683,
+              "net_return_pct": 2.9383403089482174,
+              "max_drawdown_pct": 3.1973396832274403,
+              "completed_cycles": 23,
+              "trading_costs_usdt": 3.092163539082911,
+              "stress_net_return_pct": 2.4715371248018343,
+              "stress_max_drawdown_pct": 3.3561406084985577,
+              "path_returns_pct": [
+                2.9854927262558983,
+                2.9383403089482174
+              ],
+              "stop_triggered": false,
+              "take_triggered": false
+            },
+            "buy_hold": {
+              "net_profit_usdt": 38.61137773334838,
+              "net_return_pct": 5.823737214683013,
+              "max_drawdown_pct": 5.87596001372682,
+              "completed_cycles": 0,
+              "trading_costs_usdt": 1.953648337908683,
+              "stress_net_return_pct": 5.520800492870263,
+              "stress_max_drawdown_pct": 5.8751433164609566,
+              "path_returns_pct": [
+                5.823737214683013,
+                5.823737214683013
+              ],
+              "stop_triggered": false,
+              "take_triggered": false
+            },
+            "return_delta_pct_points": -0.47433114916290453,
+            "excess_return_pct_points": -2.8853969057347957
+          }
+        },
+        "error": null
+      },
+      {
+        "training_bars": 160,
+        "evaluation_start_open_ms": 1790640000000,
+        "evaluation_end_open_ms": 1792281600000,
+        "selected_range_atr_mult": 3.0,
+        "selected_grids": 16,
+        "evaluation": {
+          "train_end_open_ms": 1790553600000,
+          "evaluation_start_open_ms": 1790640000000,
+          "evaluation_end_open_ms": 1792281600000,
+          "evaluated_bars": 20,
+          "replayed_bars": 480,
+          "excess_return_pct_points": 2.339820805193045,
+          "candidate": {
+            "net_profit_usdt": 2.6339528414152937,
+            "net_return_pct": 0.3972779549645994,
+            "max_drawdown_pct": 3.664034082892773,
+            "completed_cycles": 33,
+            "trading_costs_usdt": 5.246819504428701,
+            "stress_net_return_pct": -0.39393015900809425,
+            "stress_max_drawdown_pct": 4.067324868292493,
+            "path_returns_pct": [
+              0.3972779549645994,
+              0.39994659351662915
+            ],
+            "stop_triggered": false,
+            "take_triggered": false
+          },
+          "baseline": null,
+          "baseline_error": null,
+          "buy_hold_return_pct": -1.9425428502284459,
+          "ab_test": {
+            "strategy": "trend_core_v1",
+            "uptrend_signal": true,
+            "core_slots": 3,
+            "core_base_quantity": 0.00144,
+            "b": {
+              "net_profit_usdt": 2.6339528414152937,
+              "net_return_pct": 0.3972779549645994,
+              "max_drawdown_pct": 3.664034082892773,
+              "completed_cycles": 33,
+              "trading_costs_usdt": 5.246819504428701,
+              "stress_net_return_pct": -0.39393015900809425,
+              "stress_max_drawdown_pct": 4.067324868292493,
+              "path_returns_pct": [
+                0.3972779549645994,
+                0.39994659351662915
+              ],
+              "stop_triggered": false,
+              "take_triggered": false
+            },
+            "buy_hold": {
+              "net_profit_usdt": -12.879059097014647,
+              "net_return_pct": -1.9425428502284534,
+              "max_drawdown_pct": 8.467295159896558,
+              "completed_cycles": 0,
+              "trading_costs_usdt": 1.9599368433294075,
+              "stress_net_return_pct": -2.2348120697115914,
+              "stress_max_drawdown_pct": 8.467175760274543,
+              "path_returns_pct": [
+                -1.9425428502284534,
+                -1.9425428502284534
+              ],
+              "stop_triggered": false,
+              "take_triggered": false
+            },
+            "return_delta_pct_points": 0.0,
+            "excess_return_pct_points": 2.3398208051930527
+          }
+        },
+        "error": null
+      }
+    ],
+    "tested_candidates": 5,
+    "feasible_candidates": 1,
+    "selected_range_atr_mult": 3.0,
+    "selected_grids": 16,
+    "development_score": -7.998219572011255,
+    "baseline_score": -7.998219572011255,
+    "development_folds": [
+      {
+        "train_end_open_ms": 1781913600000,
+        "evaluation_start_open_ms": 1782000000000,
+        "evaluation_end_open_ms": 1784332800000,
+        "evaluated_bars": 28,
+        "replayed_bars": 672,
+        "excess_return_pct_points": 1.9928013121558676,
+        "candidate": {
+          "net_profit_usdt": 16.2900899272405,
+          "net_return_pct": 2.4570271383469837,
+          "max_drawdown_pct": 6.712414206263322,
+          "completed_cycles": 46,
+          "trading_costs_usdt": 5.491403517704864,
+          "stress_net_return_pct": 1.628746063451451,
+          "stress_max_drawdown_pct": 6.924438012196156,
+          "path_returns_pct": [
+            2.6522429723967487,
+            2.4570271383469837
+          ],
+          "stop_triggered": false,
+          "take_triggered": false
+        },
+        "baseline": {
+          "net_profit_usdt": 16.2900899272405,
+          "net_return_pct": 2.4570271383469837,
+          "max_drawdown_pct": 6.712414206263322,
+          "completed_cycles": 46,
+          "trading_costs_usdt": 5.491403517704864,
+          "stress_net_return_pct": 1.628746063451451,
+          "stress_max_drawdown_pct": 6.924438012196156,
+          "path_returns_pct": [
+            2.6522429723967487,
+            2.4570271383469837
+          ],
+          "stop_triggered": false,
+          "take_triggered": false
+        },
+        "baseline_error": null,
+        "buy_hold_return_pct": 0.464225826191116,
+        "ab_test": {
+          "strategy": "trend_core_v1",
+          "uptrend_signal": false,
+          "core_slots": 0,
+          "core_base_quantity": 0.0,
+          "b": {
+            "net_profit_usdt": 16.2900899272405,
+            "net_return_pct": 2.4570271383469837,
+            "max_drawdown_pct": 6.712414206263322,
+            "completed_cycles": 46,
+            "trading_costs_usdt": 5.491403517704864,
+            "stress_net_return_pct": 1.628746063451451,
+            "stress_max_drawdown_pct": 6.924438012196156,
+            "path_returns_pct": [
+              2.6522429723967487,
+              2.4570271383469837
+            ],
+            "stop_triggered": false,
+            "take_triggered": false
+          },
+          "buy_hold": {
+            "net_profit_usdt": 3.077817227647074,
+            "net_return_pct": 0.4642258261911122,
+            "max_drawdown_pct": 10.42688726017066,
+            "completed_cycles": 0,
+            "trading_costs_usdt": 1.7405775672297592,
+            "stress_net_return_pct": 0.2013936350688601,
+            "stress_max_drawdown_pct": 10.422963185835265,
+            "path_returns_pct": [
+              0.4642258261911122,
+              0.4642258261911122
+            ],
+            "stop_triggered": false,
+            "take_triggered": false
+          },
+          "return_delta_pct_points": 0.0,
+          "excess_return_pct_points": 1.9928013121558714
+        }
+      },
+      {
+        "train_end_open_ms": 1784332800000,
+        "evaluation_start_open_ms": 1784419200000,
+        "evaluation_end_open_ms": 1786752000000,
+        "evaluated_bars": 28,
+        "replayed_bars": 672,
+        "excess_return_pct_points": 2.270413229003493,
+        "candidate": {
+          "net_profit_usdt": -4.053315530438795,
+          "net_return_pct": -0.6113598085126387,
+          "max_drawdown_pct": 3.191887388247161,
+          "completed_cycles": 23,
+          "trading_costs_usdt": 3.902231512796302,
+          "stress_net_return_pct": -1.199694841045293,
+          "stress_max_drawdown_pct": 3.4510664588769058,
+          "path_returns_pct": [
+            -0.6113598085126387,
+            -0.5667634067026792
+          ],
+          "stop_triggered": false,
+          "take_triggered": false
+        },
+        "baseline": {
+          "net_profit_usdt": -4.053315530438795,
+          "net_return_pct": -0.6113598085126387,
+          "max_drawdown_pct": 3.191887388247161,
+          "completed_cycles": 23,
+          "trading_costs_usdt": 3.902231512796302,
+          "stress_net_return_pct": -1.199694841045293,
+          "stress_max_drawdown_pct": 3.4510664588769058,
+          "path_returns_pct": [
+            -0.6113598085126387,
+            -0.5667634067026792
+          ],
+          "stop_triggered": false,
+          "take_triggered": false
+        },
+        "baseline_error": null,
+        "buy_hold_return_pct": -2.881773037516132,
+        "ab_test": {
+          "strategy": "trend_core_v1",
+          "uptrend_signal": false,
+          "core_slots": 0,
+          "core_base_quantity": 0.0,
+          "b": {
+            "net_profit_usdt": -4.053315530438795,
+            "net_return_pct": -0.6113598085126387,
+            "max_drawdown_pct": 3.191887388247161,
+            "completed_cycles": 23,
+            "trading_costs_usdt": 3.902231512796302,
+            "stress_net_return_pct": -1.199694841045293,
+            "stress_max_drawdown_pct": 3.4510664588769058,
+            "path_returns_pct": [
+              -0.6113598085126387,
+              -0.5667634067026792
+            ],
+            "stop_triggered": false,
+            "take_triggered": false
+          },
+          "buy_hold": {
+            "net_profit_usdt": -19.106155238731958,
+            "net_return_pct": -2.8817730375161323,
+            "max_drawdown_pct": 6.749931644805958,
+            "completed_cycles": 0,
+            "trading_costs_usdt": 1.8896520300096826,
+            "stress_net_return_pct": -3.1620524519420092,
+            "stress_max_drawdown_pct": 6.749231371178406,
+            "path_returns_pct": [
+              -2.8817730375161323,
+              -2.8817730375161323
+            ],
+            "stop_triggered": false,
+            "take_triggered": false
+          },
+          "return_delta_pct_points": 0.0,
+          "excess_return_pct_points": 2.2704132290034935
+        }
+      },
+      {
+        "train_end_open_ms": 1786752000000,
+        "evaluation_start_open_ms": 1786838400000,
+        "evaluation_end_open_ms": 1789171200000,
+        "evaluated_bars": 28,
+        "replayed_bars": 672,
+        "excess_return_pct_points": -20.082552132774616,
+        "candidate": {
+          "net_profit_usdt": 12.597321131705371,
+          "net_return_pct": 1.9000484361546561,
+          "max_drawdown_pct": 0.5639000567253591,
+          "completed_cycles": 9,
+          "trading_costs_usdt": 1.1947208542684262,
+          "stress_net_return_pct": 1.7192246173931416,
+          "stress_max_drawdown_pct": 0.6158946935245175,
+          "path_returns_pct": [
+            1.9284237444804393,
+            1.9000484361546561
+          ],
+          "stop_triggered": false,
+          "take_triggered": true
+        },
+        "baseline": {
+          "net_profit_usdt": 12.597321131705371,
+          "net_return_pct": 1.9000484361546561,
+          "max_drawdown_pct": 0.5639000567253591,
+          "completed_cycles": 9,
+          "trading_costs_usdt": 1.1947208542684262,
+          "stress_net_return_pct": 1.7192246173931416,
+          "stress_max_drawdown_pct": 0.6158946935245175,
+          "path_returns_pct": [
+            1.9284237444804393,
+            1.9000484361546561
+          ],
+          "stop_triggered": false,
+          "take_triggered": true
+        },
+        "baseline_error": null,
+        "buy_hold_return_pct": 21.98260056892927,
+        "ab_test": {
+          "strategy": "trend_core_v1",
+          "uptrend_signal": false,
+          "core_slots": 0,
+          "core_base_quantity": 0.0,
+          "b": {
+            "net_profit_usdt": 12.597321131705371,
+            "net_return_pct": 1.9000484361546561,
+            "max_drawdown_pct": 0.5639000567253591,
+            "completed_cycles": 9,
+            "trading_costs_usdt": 1.1947208542684262,
+            "stress_net_return_pct": 1.7192246173931416,
+            "stress_max_drawdown_pct": 0.6158946935245175,
+            "path_returns_pct": [
+              1.9284237444804393,
+              1.9000484361546561
+            ],
+            "stop_triggered": false,
+            "take_triggered": true
+          },
+          "buy_hold": {
+            "net_profit_usdt": 145.74464177200105,
+            "net_return_pct": 21.982600568929268,
+            "max_drawdown_pct": 7.559228733316221,
+            "completed_cycles": 0,
+            "trading_costs_usdt": 2.194659826086598,
+            "stress_net_return_pct": 21.619200756528834,
+            "stress_max_drawdown_pct": 7.559111879329931,
+            "path_returns_pct": [
+              21.982600568929268,
+              21.982600568929268
+            ],
+            "stop_triggered": false,
+            "take_triggered": false
+          },
+          "return_delta_pct_points": 0.0,
+          "excess_return_pct_points": -20.082552132774612
+        }
+      }
+    ],
+    "holdout": {
+      "train_end_open_ms": 1789171200000,
+      "evaluation_start_open_ms": 1789257600000,
+      "evaluation_end_open_ms": 1792281600000,
+      "evaluated_bars": 36,
+      "replayed_bars": 864,
+      "excess_return_pct_points": -2.4929294938427047,
+      "candidate": {
+        "net_profit_usdt": 21.21103202177983,
+        "net_return_pct": 3.199250682018074,
+        "max_drawdown_pct": 2.80592413632991,
+        "completed_cycles": 21,
+        "trading_costs_usdt": 2.551981196072409,
+        "stress_net_return_pct": 2.813464148616124,
+        "stress_max_drawdown_pct": 2.9090436693629385,
+        "path_returns_pct": [
+          3.3433945670105207,
+          3.199250682018074
+        ],
+        "stop_triggered": false,
+        "take_triggered": true
+      },
+      "baseline": {
+        "net_profit_usdt": 21.21103202177983,
+        "net_return_pct": 3.199250682018074,
+        "max_drawdown_pct": 2.80592413632991,
+        "completed_cycles": 21,
+        "trading_costs_usdt": 2.551981196072409,
+        "stress_net_return_pct": 2.813464148616124,
+        "stress_max_drawdown_pct": 2.9090436693629385,
+        "path_returns_pct": [
+          3.3433945670105207,
+          3.199250682018074
+        ],
+        "stop_triggered": false,
+        "take_triggered": true
+      },
+      "baseline_error": null,
+      "buy_hold_return_pct": 5.692180175860779,
+      "ab_test": {
+        "strategy": "trend_core_v1",
+        "uptrend_signal": true,
+        "core_slots": 3,
+        "core_base_quantity": 0.0015,
+        "b": {
+          "net_profit_usdt": 27.496309941779828,
+          "net_return_pct": 4.1472564014750875,
+          "max_drawdown_pct": 2.80592413632991,
+          "completed_cycles": 18,
+          "trading_costs_usdt": 2.561423276072409,
+          "stress_net_return_pct": 3.7600457232767592,
+          "stress_max_drawdown_pct": 2.9090436693629385,
+          "path_returns_pct": [
+            4.194773088126668,
+            4.1472564014750875
+          ],
+          "stop_triggered": false,
+          "take_triggered": true
+        },
+        "buy_hold": {
+          "net_profit_usdt": 37.73915456595705,
+          "net_return_pct": 5.692180175860792,
+          "max_drawdown_pct": 8.366499057820043,
+          "completed_cycles": 0,
+          "trading_costs_usdt": 1.9623280601848447,
+          "stress_net_return_pct": 5.388132998520425,
+          "stress_max_drawdown_pct": 8.365560238684948,
+          "path_returns_pct": [
+            5.692180175860792,
+            5.692180175860792
+          ],
+          "stop_triggered": false,
+          "take_triggered": false
+        },
+        "return_delta_pct_points": 0.9480057194570133,
+        "excess_return_pct_points": -1.5449237743857047
+      }
+    },
+    "trend_efficiency": 0.032429280830958675,
+    "recommendation": "wait",
+    "reason": "发展段风险调整评分不为正"
+  },
+  "capital_limit_usdt": 663.0,
+  "account_equity_usdt": 663.0,
+  "investment_usdt": 650.64,
+  "unallocated_usdt": 12.360000000000014,
+  "reference_price": 82236.84,
+  "lower_price": "75883.49000000",
+  "upper_price": "88590.19000000",
+  "stop_loss": "72706.81000000",
+  "take_profit": "91766.87000000",
+  "grid_count": 16,
+  "grid_count_reason": "用户指定 16 格；仍需通过单格成本、订单金额、精度和风险校验。",
+  "quantity_per_grid": "0.00048000",
+  "grid_prices": [
+    "75883.49000000",
+    "76621.33000000",
+    "77366.34000000",
+    "78118.60000000",
+    "78878.17000000",
+    "79645.13000000",
+    "80419.55000000",
+    "81201.50000000",
+    "81991.05000000",
+    "82788.28000000",
+    "83593.25000000",
+    "84406.06000000",
+    "85226.77000000",
+    "86055.46000000",
+    "86892.20000000",
+    "87737.09000000",
+    "88590.19000000"
+  ],
+  "initial_base_quantity_estimate": 0.0037550740634900194,
+  "fee_reserve_usdt": 32.5383770111996,
+  "funding": {
+    "initial_grid_purchase_usdt": 276.73025607360006,
+    "buy_order_cash_usdt": 341.3713669152003,
+    "fee_reserve_usdt": 32.5383770111996
+  },
+  "minimum_order_usdt": 30.0,
+  "worst_gross_grid_pct": 0.9723236187537676,
+  "worst_net_grid_pct": 0.6708651333256433,
+  "minimum_net_grid_pct": 0.3,
+  "effective_cost_per_side_pct": 0.15000000000000002,
+  "risk_budget_usdt": 99.45,
+  "stop_scenario_loss_usdt": 64.40779364340824,
+  "stress_scenario_loss_usdt": 93.71940396123784,
+  "stress_exit_price": 69071.46949999999,
+  "atr": 2117.78098771882,
+  "atr_period": 14,
+  "candle_interval": "1d",
+  "data_source": "binance_public_api",
+  "atr_source": "binance_closed_klines_wilder_atr",
+  "closed_candle_count": 180,
+  "last_candle_open_ms": 1792281600000,
+  "market_as_of_ms": 1792405956442,
+  "rules": {
+    "tick_size": "0.01000000",
+    "step_size": "0.00001000",
+    "min_notional": 5.0,
+    "min_qty": 1e-05,
+    "max_qty": 9000.0,
+    "min_price": 0.01,
+    "max_price": 1000000.0,
+    "max_notional": 9000000.0,
+    "max_orders": 200
+  },
+  "warnings": [
+    "自适应建议观望：发展段风险调整评分不为正。线位仅供诊断，不建议据此启动。",
+    "止损情景按单边下跌、订单完整成交及给定成本计算；跳空、流动性不足或未卖出可使亏损超过预算。",
+    "TP 是停止机器人价格；上限以上通常已经卖完网格币，继续上涨不等于继续赚取网格利润。",
+    "请开启币安「停止时卖出全部基础币」，并核对创建预览里的实际数量、手续费预留和最低投入。",
+    "ATR 只衡量已发生的波动，不预测方向；倍数是可调参数，不是未来区间的概率保证。",
+    "历史回放假设限价完整成交、建仓按此前收盘价及给定成本执行；K 线内顺序、排队和真实滑点无法由 OHLC 证明。"
+  ],
+  "csv_snapshots": [
+    {
+      "file": "risk-replay-btc-daily.csv",
+      "sha256": "56933686505dd28dff573350769a14bf8d66bcc57e8456186d26afe9a607ac1d"
+    },
+    {
+      "file": "risk-replay-btc-hourly.csv",
+      "sha256": "19756c31da9a3cf98eff03bc1837ee54bd9987e8979a45bece6945bbb311758f"
+    }
+  ],
+  "source_url": "https://api.binance.com/api/v3/klines",
+  "note": "日线 ATR、真实小时成交回放和压力预算重新选参；与旧截图的日线 OHLC 假设及原风险模型不同，不可直接把收益变化归因于策略改进。"
+}

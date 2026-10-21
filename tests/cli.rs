@@ -56,6 +56,10 @@ fn check_invariants(p: &Value) {
         p["stop_scenario_loss_usdt"].as_f64().unwrap() <= p["risk_budget_usdt"].as_f64().unwrap()
     );
     assert!(qty * low >= p["minimum_order_usdt"].as_f64().unwrap() - 1e-8);
+    assert!(
+        p["stress_scenario_loss_usdt"].as_f64().unwrap()
+            <= p["risk_budget_usdt"].as_f64().unwrap() + 1e-8
+    );
     let funding: f64 = levels[..n] // 按 JSON 价位独立重建的全部网格购买成本，不调用规划器内部函数。
         .iter()
         .map(|v| number(v).min(price) * qty * (1.0 + fee))
@@ -597,11 +601,15 @@ fn adaptive_candles(dir: &TempDir, count: usize, scenario: &str) -> std::path::P
         let close = match scenario {
             "flat" => 84000.0,
             "down" => 84000.0 - i as f64 * 180.0,
+            "up" | "up-gap" | "up-tail" if i < 144 => 74000.0 + i as f64 * 60.0,
+            "up" => 82580.0 + (i - 143) as f64 * 600.0,
+            "up-gap" => 50000.0,
+            "up-tail" => 82580.0 - (i - 143) as f64 * 80.0,
             "gap" if i >= count * 4 / 5 => 50000.0,
             "tail" if i >= count * 4 / 5 => 84000.0 + wave * 0.8,
             _ => 84000.0 + wave,
         };
-        let open = if scenario == "gap" && i == count * 4 / 5 {
+        let open = if matches!(scenario, "gap" | "up-gap") && i == count * 4 / 5 {
             close
         } else {
             previous
@@ -1363,4 +1371,159 @@ fn historical_requests_follow_the_configured_proxy() {
         assert_eq!(h["closed_candle_count"], 30);
         assert_eq!(h["atr"], 2000.0);
     }
+}
+
+/// 输入：无；返回：无；真实 CLI 的 B 组在上涨保留底仓，降低卖出次数并记录完整持有基准。
+#[test]
+fn trend_core_ab_retains_inventory_in_uptrend() {
+    let dir = TempDir::new().unwrap();
+    let p = adaptive_plan(&adaptive_candles(&dir, 180, "up"), &["--grids", "16"]);
+    let h = &p["optimization"]["holdout"];
+    let ab = &h["ab_test"];
+    assert_eq!(ab["strategy"], "trend_core_v1");
+    assert_eq!(ab["uptrend_signal"], true);
+    assert!(ab["core_slots"].as_u64().unwrap() > 0);
+    assert!(
+        ab["b"]["net_return_pct"].as_f64().unwrap()
+            > h["candidate"]["net_return_pct"].as_f64().unwrap()
+    );
+    assert!(
+        ab["b"]["completed_cycles"].as_u64().unwrap()
+            < h["candidate"]["completed_cycles"].as_u64().unwrap()
+    );
+    let delta = ab["b"]["net_return_pct"].as_f64().unwrap()
+        - h["candidate"]["net_return_pct"].as_f64().unwrap();
+    assert!((ab["return_delta_pct_points"].as_f64().unwrap() - delta).abs() < 1e-9);
+    assert!(
+        (ab["buy_hold"]["net_return_pct"].as_f64().unwrap()
+            - h["buy_hold_return_pct"].as_f64().unwrap())
+        .abs()
+            < 1e-9
+    );
+    assert!(ab["buy_hold"]["max_drawdown_pct"].as_f64().unwrap() > 0.0);
+    for key in ["b", "buy_hold"] {
+        let m = &ab[key];
+        assert!(m["trading_costs_usdt"].as_f64().unwrap() > 0.0);
+        assert!(
+            m["stress_net_return_pct"].as_f64().unwrap() <= m["net_return_pct"].as_f64().unwrap()
+        );
+    }
+}
+
+/// 输入：无；返回：无；非上涨的平盘与下跌前缀不能激活底仓，B 必须等于 A。
+#[test]
+fn trend_core_ab_falls_back_without_signal() {
+    let dir = TempDir::new().unwrap();
+    for scenario in ["flat", "down"] {
+        let p = adaptive_plan(&adaptive_candles(&dir, 180, scenario), &[]);
+        let h = &p["optimization"]["holdout"];
+        assert_eq!(h["ab_test"]["uptrend_signal"], false);
+        assert_eq!(h["ab_test"]["core_slots"], 0);
+        assert_eq!(h["ab_test"]["b"], h["candidate"]);
+    }
+}
+
+/// 输入：无；返回：无；尾部上涨/回落/跳空不能改变底仓信号及选参，底仓跳空需真实亏损。
+#[test]
+fn trend_core_ab_isolates_holdout_and_liquidates_core_on_gap() {
+    let dir = TempDir::new().unwrap();
+    for mode in ["geometric", "arithmetic"] {
+        let extra = ["--grids", "16", "--grid-mode", mode];
+        let a = adaptive_plan(&adaptive_candles(&dir, 180, "up"), &extra);
+        for scenario in ["up-tail", "up-gap"] {
+            let b = adaptive_plan(&adaptive_candles(&dir, 180, scenario), &extra);
+            for key in [
+                "development_folds",
+                "development_score",
+                "selected_grids",
+                "selected_range_atr_mult",
+            ] {
+                assert_eq!(a["optimization"][key], b["optimization"][key]);
+            }
+            let ab = &b["optimization"]["holdout"]["ab_test"];
+            assert_eq!(ab["uptrend_signal"], true);
+            assert_eq!(
+                ab["core_slots"],
+                a["optimization"]["holdout"]["ab_test"]["core_slots"]
+            );
+            if scenario == "up-gap" {
+                assert_eq!(ab["b"]["stop_triggered"], true);
+                assert!(ab["b"]["net_return_pct"].as_f64().unwrap() < -10.0);
+                assert!(ab["b"]["max_drawdown_pct"].as_f64().unwrap() > 10.0);
+            }
+        }
+    }
+}
+
+/// 输入：请求路径；返回：精确聚合到既有日线的小时线分页，非小时请求沿用原服务。
+fn replay_response(path: &str) -> (u16, Value) {
+    if !path.contains("interval=1h") {
+        return adaptive_response(path);
+    }
+    let url = reqwest::Url::parse(&format!("http://fixture{path}")).unwrap();
+    let params: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
+    let first: u64 = params["startTime"].parse().unwrap();
+    let end: u64 = params["endTime"].parse().unwrap();
+    let (_, days) = adaptive_response("/api/v3/klines");
+    let mut rows = Vec::new();
+    for c in days.as_array().unwrap().iter().take(180) {
+        let nodes = [number(&c[1]), number(&c[3]), number(&c[2]), number(&c[4])];
+        let price = |hour: usize| {
+            let segment = (hour / 8).min(2);
+            nodes[segment]
+                + (nodes[segment + 1] - nodes[segment]) * (hour - segment * 8) as f64 / 8.0
+        };
+        for hour in 0..24 {
+            let start = c[0].as_u64().unwrap() + hour as u64 * 3_600_000;
+            if start < first || start > end || rows.len() == 1000 {
+                continue;
+            }
+            let (open, close) = (price(hour), price(hour + 1));
+            rows.push(json!([
+                start,
+                open.to_string(),
+                open.max(close).to_string(),
+                open.min(close).to_string(),
+                close.to_string(),
+                "1",
+                start + 3_600_000 - 1
+            ]));
+        }
+    }
+    (200, json!(rows))
+}
+
+/// 输入：无；返回：无；真实 HTTP 分五页读取 4320 根小时线，完整覆盖日线且进入最终检验。
+#[test]
+fn hourly_replay_download_paginates_and_uses_complete_history() {
+    let (url, handle) = server(replay_response, 9);
+    let o = run(&[
+        "--json",
+        "--capital",
+        "3000",
+        "--equity",
+        "15000",
+        "--live",
+        "--mode",
+        "atr",
+        "--algorithm",
+        "adaptive",
+        "--history-bars",
+        "180",
+        "--grids",
+        "4",
+        "--replay-interval",
+        "1h",
+        "--api-base-url",
+        &url,
+    ]);
+    handle.join().unwrap();
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    let p: Value = serde_json::from_slice(&o.stdout).unwrap();
+    assert_eq!(
+        p["execution_history"]["candles"].as_array().unwrap().len(),
+        4320
+    );
+    assert_eq!(p["optimization"]["holdout"]["replayed_bars"], 864);
+    assert_eq!(p["optimization"]["execution_interval"], "1h");
 }

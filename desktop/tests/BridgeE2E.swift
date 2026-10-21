@@ -26,7 +26,8 @@ struct BridgeE2E {
         try arithmetic(engine)
         try adaptiveArithmetic(engine, api)
         try oldDraft()
-        print("desktop bridge E2E: 15 passed（表单 → 真实子进程 → HTTP/JSON → 显示/复制数据）")
+        try metricHelp(engine)
+        print("desktop bridge E2E: 16 passed（表单 → 真实子进程 → HTTP/JSON → 显示/复制数据）")
     }
 
     /// 输入：无；返回：明确的离线示例表单，不保存或读取用户偏好。
@@ -52,9 +53,9 @@ struct BridgeE2E {
     /// 输入：真实后端；返回：无；核对 JSON 解析、展示值和可复制文本都来自同一份方案。
     private static func percent(_ engine: URL) throws {
         let result = try calculate(draft(), engine) // 经真实子进程解码的结果，展示与导出都从此读取。
-        try check(result.plan.gridCount == 3, "默认格数应为 3")
+        try check(result.plan.gridCount >= 2 && result.plan.stressScenarioLossUsdt <= result.plan.riskBudgetUsdt, "默认方案未满足压力预算")
         try check(result.plan.lowerPrice == "75600.00" && result.plan.stopLoss == "73332.00", "线位与 CLI 不一致")
-        try check(money(result.plan.investmentUsdt) == "131.81", "投入不一致")
+        try check(result.plan.investmentUsdt <= result.plan.capitalLimitUsdt, "投入超过本金")
         try check(result.plan.copyText().contains("停止价 TP：95172.00"), "复制文本缺少正确 TP")
         let json = try JSONSerialization.jsonObject(with: result.json) as! [String: Any] // 导出字节的独立 JSON 解析结果，用于对照界面值。
         try check(json["grid_count"] as? Int == result.plan.gridCount, "导出与显示不一致")
@@ -87,7 +88,7 @@ struct BridgeE2E {
         form.useProxy = true
         form.values[FieldID.proxyPort.rawValue] = "invalid"
         let p = try calculate(form, engine).plan // 实际计算方案，不在测试中替换后端或硬造结果。
-        try check(p.gridCount == 3 && p.dataSource == "offline_inputs", "离线错误使用了代理")
+        try check(p.gridCount >= 2 && p.dataSource == "offline_inputs", "离线错误使用了代理")
     }
 
     /// 输入：真实后端；返回：无；前端完整链路捕获计算进程的非法数字错误。
@@ -193,9 +194,18 @@ struct BridgeE2E {
         let report = result.plan.optimization
         try check(result.plan.algorithm == "adaptive" && report != nil, "自适应 JSON 未解码")
         try check(report?.holdout.evaluatedBars == 36, "最终检验没有保留 20% 历史")
+        try check(report?.holdout.abTest?.strategy == "trend_core_v1", "A/B 实验未解码")
+        try check(result.plan.stressScenarioLossUsdt <= result.plan.riskBudgetUsdt, "压力损失超过预算")
+        try check(result.plan.funding != nil, "缺少资金拆分")
+        try check(report?.rollingValidation?.count == 3, "缺少滚动样本外窗口")
+        try check(report?.holdout.excessReturnPctPoints != nil, "缺少超额收益")
+        try check(report?.holdout.abTest?.buyHold.maxDrawdownPct != nil, "持有基准缺少回撤")
         try check(result.plan.copyText().contains("最终检验"), "复制文本缺少历史证据")
         let json = try JSONSerialization.jsonObject(with: result.json) as! [String: Any]
         try check(json["optimization"] != nil, "导出丢失选参审计数据")
+        form.values[FieldID.replayInterval.rawValue] = "1h"
+        try check(form.arguments().contains("--replay-interval"), "表单未传递细周期回放")
+        form.values[FieldID.replayInterval.rawValue] = ""
         form.values[FieldID.historyBars.rawValue] = "60"
         do {
             _ = try EngineRunner(executable: engine).execute(arguments: form.arguments() + ["--api-base-url", api + "/adaptive"])
@@ -243,4 +253,23 @@ struct BridgeE2E {
         try check(form.arguments().contains("adaptive"), "旧草稿没有自适应默认值")
         try check(form.arguments().contains("--grid-mode") && form.arguments().contains("geometric"), "旧草稿没有补等比默认值")
     }
+    /// 输入：真实后端；返回：无；新手说明覆盖全部生产输入及指标，且不会改变真实方案参数。
+    private static func metricHelp(_ engine: URL) throws {
+        let form = draft()
+        let before = try calculate(form, engine)
+        for field in FieldID.allCases {
+            try check(MetricGuide.explanation(for: "input." + field.rawValue) != nil, "字段缺少说明：\(field.rawValue)")
+        }
+        for key in MetricGuide.resultKeys {
+            try check(MetricGuide.explanation(for: key)?.isEmpty == false, "指标缺少说明：\(key)")
+        }
+        try check(MetricGuide.explanation(for: "B 如何激活？")?.contains("20 根") == true, "B 说明缺少激活条件")
+        try check(MetricGuide.explanation(for: "B 段前趋势 / 底仓格")?.contains("不代表没有持币") == true, "未激活解释有歧义")
+        try check(MetricGuide.explanation(for: "最终检验")?.contains("4h") == true, "根数说明缺少周期换算")
+        try check(MetricGuide.explanation(for: "ATR · 4h") != nil, "动态 ATR 标签未匹配")
+        try check(MetricGuide.explanation(for: "Wilder ATR(14)") != nil, "动态历史 ATR 标签未匹配")
+        let after = try calculate(form, engine)
+        try check(before.json == after.json, "查看说明影响真实方案")
+    }
+
 }

@@ -111,6 +111,14 @@ fn append_estimates(text: &mut String, p: &Plan) -> Result<()> {
         "跌穿止损的压力情景：成交价 {:.4}，亏损 {:.2} USDT",
         p.stress_exit_price, p.stress_scenario_loss_usdt
     )?;
+    writeln!(
+        text,
+        "投入内资金分配：启动网格购币（含买费）{:.2} + 下方买单现金 {:.2} + 储备币购入成本 {:.2} = {:.2} USDT；储备不额外加到本金。",
+        p.funding.initial_grid_purchase_usdt,
+        p.funding.buy_order_cash_usdt,
+        p.funding.fee_reserve_usdt,
+        p.investment_usdt
+    )?;
     append_sources(text, p)?;
     append_optimization(text, p)?;
     Ok(())
@@ -125,6 +133,11 @@ fn append_optimization(text: &mut String, p: &Plan) -> Result<()> {
         text,
         "\n自适应历史验证：{} / {} 候选可行，区间 {:.2} ATR，发展段评分 {:.4}",
         o.feasible_candidates, o.tested_candidates, o.selected_range_atr_mult, o.development_score
+    )?;
+    writeln!(
+        text,
+        "成交回放周期：{}；发展评分参与选参，不是样本外评分。",
+        o.execution_interval
     )?;
     let h = &o.holdout;
     writeln!(
@@ -147,6 +160,13 @@ fn append_optimization(text: &mut String, p: &Plan) -> Result<()> {
         "同额投入买入持有：{:.4}%（风险敞口不同）；历史结果不保证未来收益。",
         h.buy_hold_return_pct
     )?;
+    writeln!(
+        text,
+        "A 相对买入持有超额收益 {:+.4} 个百分点；实际成交回放 {} 根。",
+        h.excess_return_pct_points, h.replayed_bars
+    )?;
+    append_comparison(text, &h.ab_test)?;
+    append_rolling(text, &o.rolling_validation)?;
     Ok(())
 }
 
@@ -172,6 +192,72 @@ fn append_sources(text: &mut String, p: &Plan) -> Result<()> {
     if let Some(time) = p.market_as_of_ms {
         // time 为服务器 Unix 毫秒，离线报告不补造快照时间。
         writeln!(text, "行情读取时服务器时间：{time}（Unix 毫秒）")?;
+    }
+    Ok(())
+}
+
+/// 输入：文本缓冲和同段实验；返回：写入 A/B 收益差、回撤和成本压力的结果，不切换正式策略。
+fn append_comparison(text: &mut String, ab: &crate::experiment::Comparison) -> Result<()> {
+    writeln!(
+        text,
+        "\nA/B 实验：趋势底仓网格 {}；段前上涨信号 {}，底仓 {} 格",
+        ab.strategy, ab.uptrend_signal, ab.core_slots
+    )?;
+    writeln!(
+        text,
+        "B 净收益 {:.4}%，B − A {:+.4} 个百分点，最大回撤 {:.4}%，双倍成本收益 {:.4}%",
+        ab.b.net_return_pct,
+        ab.return_delta_pct_points,
+        ab.b.max_drawdown_pct,
+        ab.b.stress_net_return_pct
+    )?;
+    writeln!(
+        text,
+        "同额买入持有最大回撤 {:.4}%，双倍成本收益 {:.4}%（无网格止损）",
+        ab.buy_hold.max_drawdown_pct, ab.buy_hold.stress_net_return_pct
+    )?;
+    writeln!(
+        text,
+        "B 相对持有超额收益 {:+.4} 个百分点。",
+        ab.excess_return_pct_points
+    )?;
+    writeln!(
+        text,
+        "B 只锁定初始卖格半数，共用 A 投入和 SL/TP；可能增加库存回撤。实验不会自动切换策略，填写参数仍为 A；B 需独立底仓管理。"
+    )?;
+    Ok(())
+}
+
+/// 输入：文本缓冲及独立滚动窗口；返回：逐段样本外收益和失败原因，不将独立段错误复利。
+fn append_rolling(
+    text: &mut String,
+    windows: &[crate::optimizer::RollingEvaluation],
+) -> Result<()> {
+    writeln!(
+        text,
+        "\n滚动样本外：{} 段，每段仅用此前数据独立重新选参、独立建仓；不拼接成连续复利。",
+        windows.len()
+    )?;
+    for (i, window) in windows.iter().enumerate() {
+        if let Some(fold) = &window.evaluation {
+            writeln!(
+                text,
+                "窗口 {}：训练 {} 根，A 收益 {:.4}%，B 收益 {:.4}%，A 回撤 {:.4}%，A 相对持有 {:+.4} 个百分点",
+                i + 1,
+                window.training_bars,
+                fold.candidate.net_return_pct,
+                fold.ab_test.b.net_return_pct,
+                fold.candidate.max_drawdown_pct,
+                fold.excess_return_pct_points
+            )?;
+        } else {
+            writeln!(
+                text,
+                "窗口 {} 不可行：{}",
+                i + 1,
+                window.error.as_deref().unwrap_or("未知原因")
+            )?;
+        }
     }
     Ok(())
 }

@@ -4,6 +4,8 @@ mod backtest;
 mod candles;
 mod config;
 mod data;
+mod execution;
+mod experiment;
 mod input;
 mod model;
 mod optimizer;

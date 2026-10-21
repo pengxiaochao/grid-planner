@@ -31,7 +31,7 @@ struct Candidate {
     initial_base: f64,
     /// 单边下跌、完整成交且按 SL 卖出的情景亏损，单位 USDT。
     stop_loss: f64,
-    /// 跌穿 SL 后再下跌 stress_pct 时的情景亏损，可能超过预算。
+    /// 跌穿 SL 后再下跌 stress_pct 时的情景亏损，受指定压力预算约束，真实损失仍可能更大。
     stress_loss: f64,
     /// 压力情景假设的实际卖出价格，单位 USDT。
     stress_exit: f64,
@@ -65,7 +65,11 @@ pub fn generate(settings: &Settings, market: Market) -> Result<Plan> {
         // n 是本轮候选段数；首个可行值就是搜索顺序中的最大值。
         match candidate(settings, &market, &range, n, &price_step, &qty_step) {
             Ok(candidate) => {
-                return build_plan(settings, market, range, candidate, (&price_step, &qty_step));
+                return build_plan(
+                    settings,
+                    market,
+                    (range, candidate, (&price_step, &qty_step)),
+                );
             }
             Err(error) => last_error = format!("{n} 格：{error}"),
         }
@@ -203,8 +207,9 @@ fn candidate(
     let total_base = n as f64 * qty + reserve_base; // 单边跌至下限后 N 格基础币加预留币的总库存。
     let stop_loss = investment - total_base * range.stop * (1.0 - cost); // 全库存按 SL 扣卖出成本清仓后的情景亏损，单位 USDT。
     let stress_exit = range.stop * (1.0 - s.stress_pct / 100.0); // 假设跌穿止损后再跌 stress_pct 的实际卖出价。
-    let stress_loss = investment - total_base * stress_exit * (1.0 - cost); // 按压力卖出价清仓的情景亏损，用于暴露超预算可能。
-    ensure!(stop_loss <= risk_budget(s) + 1e-9, "数量取整后超过风险预算");
+    let stress_loss = investment - total_base * stress_exit * (1.0 - cost); // 按压力卖出价清仓的情景亏损，用于取整后的压力预算复核。
+    let within_budget = stop_loss.max(stress_loss) <= risk_budget(s) + 1e-9;
+    ensure!(within_budget, "数量及投入取整后损失超过风险预算");
     let initial_slots = prices[..n].iter().filter(|p| **p >= market.price).count(); // 启动时价格点不低于现价的卖格数，需要提前买入相应基础币。
     Ok(Candidate {
         prices,
@@ -239,10 +244,11 @@ fn size(
         .sum();
     let funding_unit = entry_sum / (1.0 - reserve_rate); // 每格数量为 1 时含费用预留的总资金：购买成本/(1-预留比例)。
     let reserve_unit = funding_unit - entry_sum; // 每格数量为 1 时的费用预留成本，也纳入止损风险。
-    let reserve_loss_rate = 1.0 - range.stop * (1.0 - cost) / (market.price * (1.0 + cost)); // 预留币从含买费现价跌到扣卖费 SL 的亏损比例。
-    let loss_unit = // 每格数量为 1 时，网格库存与预留币合计的止损情景亏损。
-        entry_sum - n as f64 * range.stop * (1.0 - cost) + reserve_unit * reserve_loss_rate;
-    let budget = risk_budget(s); // 账户资产乘风险百分比的 USDT 预算，只约束给定止损情景。
+    let exit = range.stop * (1.0 - s.stress_pct / 100.0); // 按压力成交价约束，正常 SL 损失同时受约束。
+    let reserve_loss_rate = 1.0 - exit * (1.0 - cost) / (market.price * (1.0 + cost)); // 预留币从含买费现价跌到压力成交价并扣卖费的亏损比例。
+    let loss_unit = // 每格数量为 1 时，网格库存与预留币合计的压力情景亏损。
+        entry_sum - n as f64 * exit * (1.0 - cost) + reserve_unit * reserve_loss_rate;
+    let budget = risk_budget(s); // 账户资产乘风险百分比的 USDT 预算，同时约束正常止损和指定压力情景。
     ensure!(
         budget > 0.01 && loss_unit.is_finite() && loss_unit > 0.0,
         "风险预算过低或风险计算无效"
@@ -268,7 +274,7 @@ fn size(
     Ok((qty, investment))
 }
 
-/// 输入：账户设置；返回：本策略的账户级止损情景预算，单位 USDT。
+/// 输入：账户设置；返回：正常止损及配置压力情景共用的账户预算，单位 USDT。
 fn risk_budget(s: &Settings) -> f64 {
     s.equity.unwrap_or(s.capital) * s.risk_pct / 100.0
 }
@@ -286,12 +292,12 @@ fn grid_count_reason(s: &Settings) -> String {
 fn build_plan(
     s: &Settings,
     market: Market,
-    range: Range,
-    c: Candidate,
-    steps: (&Step, &Step),
+    (range, c, steps): (Range, Candidate, (&Step, &Step)),
 ) -> Result<Plan> {
     Ok(Plan {
+        funding: funding(&c, market.price, (s.fee_pct + s.slippage_pct) / 100.0),
         warnings: warnings(s, &market),
+        execution_history: market.execution,
         symbol: s.symbol.clone(),
         mode: s.grid_mode,
         range_model: format!("{:?}", s.mode).to_lowercase(),
@@ -357,4 +363,20 @@ fn warnings(s: &Settings, market: &Market) -> Vec<String> {
         warnings.extend(history.warnings.iter().cloned());
     }
     warnings
+}
+
+/// 输入：已校验候选、参考价与每边成本；返回：投入内启动购币、挂买现金、储备币成本的守恒拆分。
+fn funding(c: &Candidate, price: f64, cost: f64) -> crate::model::Funding {
+    let initial = c.prices[..c.prices.len() - 1]
+        .iter()
+        .filter(|p| **p >= price)
+        .count() as f64
+        * c.qty
+        * price
+        * (1.0 + cost);
+    crate::model::Funding {
+        initial_grid_purchase_usdt: initial,
+        buy_order_cash_usdt: c.investment - c.reserve - initial,
+        fee_reserve_usdt: c.reserve,
+    }
 }

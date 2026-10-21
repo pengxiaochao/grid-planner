@@ -54,6 +54,8 @@ struct Book {
     prices: Vec<f64>,
     /// N 个槽位的持币状态，false 表示挂买单。
     held: Vec<bool>,
+    /// 初始库存中的底仓槽位；只在终止清仓时卖出，不再参与逐格交易。
+    core: Vec<bool>,
     /// 固定每格基础币数量，不因回放收益增加订单数量。
     quantity: f64,
     /// 按给定成本购买并持有至终止的费用储备币。
@@ -90,6 +92,7 @@ impl Book {
         ensure!(cash >= -1e-8, "回放初始购币超过策略投入");
         Ok(Self {
             prices,
+            core: vec![false; held.len()],
             held,
             quantity,
             reserve_base,
@@ -178,6 +181,35 @@ impl Simulation {
         Ok(state)
     }
 
+    /// 输入：原方案与回放变体；返回：无；保持原投入，底仓不额外购币，持有基准不借款。
+    fn configure(&mut self, p: &Plan, variant: Replay) {
+        match variant {
+            Replay::Grid => {}
+            Replay::Core(count) => {
+                let mut remaining = count;
+                for i in (0..self.book.held.len()).rev() {
+                    if self.book.held[i] && remaining > 0 {
+                        self.book.core[i] = true;
+                        remaining -= 1;
+                    }
+                }
+            }
+            Replay::Hold => {
+                self.book.held.clear();
+                self.book.core.clear();
+                self.book.reserve_base =
+                    p.investment_usdt / (p.reference_price * (1.0 + self.book.cost));
+                self.book.cash = 0.0;
+                self.book.costs = self.book.reserve_base * p.reference_price * self.book.cost;
+                self.stop = 0.0;
+                self.take = f64::INFINITY;
+                self.peak = p.capital_limit_usdt;
+                self.drawdown = 0.0;
+                self.mark(p.reference_price);
+            }
+        }
+    }
+
     /// 输入：当前价格；返回：无；以可清仓权益更新峰值和回撤，库存浮亏不能忽略。
     fn mark(&mut self, price: f64) {
         let equity = self.book.equity(price);
@@ -212,7 +244,7 @@ impl Simulation {
             } else {
                 self.book.held[i] && self.cursor < price && target >= price
             };
-            if crossed {
+            if crossed && !self.book.core[i] {
                 self.book.trade(i, down, price);
                 self.mark(price);
             }
@@ -234,9 +266,16 @@ impl Simulation {
     }
 }
 
-/// 输入：方案、后续 K 线、成本与路径顺序；返回：该路径清仓结果，不读取训练段以后的指标。
-fn run_path(p: &Plan, candles: &[Candle], cost: f64, high_first: bool) -> Result<Outcome> {
+/// 输入：方案、后续 K 线、成本、路径顺序与策略变体；返回：该路径清仓结果，不读取未来指标。
+fn run_path(
+    p: &Plan,
+    candles: &[Candle],
+    cost: f64,
+    high_first: bool,
+    variant: Replay,
+) -> Result<Outcome> {
     let mut state = Simulation::new(p, cost)?;
+    state.configure(p, variant);
     for c in candles {
         state.segment(c.open, true);
         let path = if high_first {
@@ -266,16 +305,32 @@ fn run_path(p: &Plan, candles: &[Candle], cost: f64, high_first: bool) -> Result
 
 /// 输入：合法方案和连续后续 K 线；返回：两条 OHLC 路径与双倍成本下的保守历史指标。
 pub fn evaluate(p: &Plan, candles: &[Candle]) -> Result<BacktestMetrics> {
+    evaluate_variant(p, candles, Replay::Grid)
+}
+
+/// 回放变体；B 只锁初始卖格的一半，持有基准使用全部同额投入且不设网格停止价。
+#[derive(Clone, Copy)]
+pub enum Replay {
+    /// 原有静态网格。
+    Grid,
+    /// 趋势底仓网格，参数为预先声明且由前缀信号激活的底仓槽位数。
+    Core(usize),
+    /// 同额买入并持有至段末。
+    Hold,
+}
+
+/// 输入：合法方案、后续 K 线和固定变体；返回：普通与双倍成本、两条路径的保守指标。
+pub fn evaluate_variant(p: &Plan, candles: &[Candle], variant: Replay) -> Result<BacktestMetrics> {
     ensure!(!candles.is_empty(), "历史回放需要后续 K 线");
     let cost = p.effective_cost_per_side_pct / 100.0;
     ensure!(cost * 2.0 < 1.0, "自适应双倍成本必须小于 100%");
     let normal = [
-        run_path(p, candles, cost, true)?,
-        run_path(p, candles, cost, false)?,
+        run_path(p, candles, cost, true, variant)?,
+        run_path(p, candles, cost, false, variant)?,
     ];
     let stress = [
-        run_path(p, candles, cost * 2.0, true)?,
-        run_path(p, candles, cost * 2.0, false)?,
+        run_path(p, candles, cost * 2.0, true, variant)?,
+        run_path(p, candles, cost * 2.0, false, variant)?,
     ];
     let worst = if normal[0].profit <= normal[1].profit {
         &normal[0]

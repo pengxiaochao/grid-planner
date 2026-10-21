@@ -49,7 +49,7 @@ enum FieldID: String, CaseIterable, Sendable {
     case upper
     /// 固定 K 线周期字符串，例如 1d；同时决定连续性及收盘边界。
     case interval
-    /// 本策略止损情景占账户总资产的预算百分比；不保证实际亏损上限。
+    /// 正常止损与指定压力情景共用的账户预算百分比；不保证实际亏损上限。
     case risk = "risk-pct"
     /// 百分比模式向下幅度，填 10 表示 10%，不是 0.10。
     case down = "down-pct"
@@ -83,6 +83,8 @@ enum FieldID: String, CaseIterable, Sendable {
     case rangeAtr = "range-atr-mult"
     /// 可选历史请求根数，最多 1000；必须大于 atr_period 才能计算 ATR。
     case historyBars = "history-bars"
+    /// 可选独立成交回放细周期，空白保留原周期情景模式。
+    case replayInterval = "replay-interval"
     /// ATR 模式下，从区间下限再向下缓冲多少倍 ATR。
     case stopAtr = "stop-atr-mult"
     /// ATR 模式下，从区间上限再向上缓冲多少倍 ATR。
@@ -124,11 +126,12 @@ struct FieldSpec: Sendable {
         .equity: .init(title: "账户资产 · USDT", initial: "", placeholder: "留空 = 最多投入"),
         .symbol: .init(title: "交易对", initial: "BTCUSDT", placeholder: "BTCUSDT"),
         .price: .init(title: "当前价格 · USDT", initial: "", placeholder: "填写币安当前价格"),
-        .risk: .init(title: "账户风险 · %", initial: "2", placeholder: "2 表示 2%"),
+        .risk: .init(title: "压力风险预算 · %", initial: "2", placeholder: "2 表示 2%"),
         .atr: .init(title: "ATR 价格波幅", initial: "", placeholder: "图表 ATR 数值，如 2000"),
         .lower: .init(title: "区间下限 · USDT", initial: "", placeholder: "你确定的下限"),
         .upper: .init(title: "区间上限 · USDT", initial: "", placeholder: "你确定的上限"),
         .interval: .init(title: "K 线周期", initial: "1d", placeholder: "1d"),
+        .replayInterval: .init(title: "成交回放周期", initial: "", placeholder: "留空使用原周期"),
         .historyBars: .init(title: "历史 K 线根数", initial: "180", placeholder: "大于 ATR 周期，最多 1000"),
         .down: .init(title: "向下幅度 · %", initial: "10", placeholder: "10"),
         .up: .init(title: "向上幅度 · %", initial: "10", placeholder: "10"),
@@ -188,6 +191,7 @@ struct FormState: Codable, Equatable, Sendable {
             try require([.price])
             append([.price, .tick, .step, .minNotional, .minQty, .maxQty, .maxNotional], to: &args)
         }
+        if live && value(.algorithm) == "adaptive" { append([.replayInterval], to: &args) }
         switch range {
         case .percent: append([.down, .up, .outside], to: &args)
         case .manual:

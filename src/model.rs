@@ -83,6 +83,8 @@ pub struct Market {
     pub history: Option<History>,
     /// 同批已校验 OHLC，供历史选参；离线 CSV 也保留，但不伪造公开 History。
     pub candles: Vec<Candle>,
+    /// 可选真实细周期成交回放历史，不能用粗周期插值替代。
+    pub execution: Option<crate::execution::ExecutionHistory>,
 }
 
 /// 可独立导出的历史快照；保存真实样本、ATR 与获取时间，方便图表展示及复算。
@@ -200,6 +202,10 @@ pub struct Plan {
     pub initial_base_quantity_estimate: f64,
     /// 预留基础币在现价下的购买成本，单位 USDT；包含在总投入中。
     pub fee_reserve_usdt: f64,
+    /// 投入内的守恒拆分；费用储备币已包含，不额外占用资金。
+    pub funding: Funding,
+    /// 实际用于成交回放的细周期历史，随方案导出供复算。
+    pub execution_history: Option<crate::execution::ExecutionHistory>,
     /// 用户单格金额门槛与交易所 minNotional 的较大值，单位 USDT。
     pub minimum_order_usdt: f64,
     /// 取整后所有相邻格中最低的毛收益百分比。
@@ -210,11 +216,11 @@ pub struct Plan {
     pub minimum_net_grid_pct: f64,
     /// 每边手续费加额外成本的百分比；买卖各计算一次。
     pub effective_cost_per_side_pct: f64,
-    /// 账户资产 × risk_pct / 100，单位 USDT；只约束模型止损情景。
+    /// 账户资产 × risk_pct / 100，单位 USDT；约束正常止损及配置的压力情景。
     pub risk_budget_usdt: f64,
     /// 单边下跌、完整成交且按 SL 卖出的情景亏损，单位 USDT。
     pub stop_scenario_loss_usdt: f64,
-    /// 跌穿 SL 后再下跌 stress_pct 时的情景亏损，可能超过预算。
+    /// 跌穿 SL 后再下跌 stress_pct 时的情景亏损，受指定压力预算约束。
     pub stress_scenario_loss_usdt: f64,
     /// 压力情景假设的实际卖出价格，单位 USDT。
     pub stress_exit_price: f64,
@@ -240,4 +246,15 @@ pub struct Plan {
     pub warnings: Vec<String>,
     /// 可选同批公开 OHLC 快照，供桌面图表及导出复算；离线不伪造历史。
     pub history: Option<History>,
+}
+
+/// 同一笔投入的三个互斥部分，合计等于 investment_usdt。
+#[derive(Serialize)]
+pub struct Funding {
+    /// 初始卖格基础币的买入成本，包含假定每边买入成本，不包含储备币。
+    pub initial_grid_purchase_usdt: f64,
+    /// 为下方挂买网格保留的 USDT 现金，不包含未分配本金。
+    pub buy_order_cash_usdt: f64,
+    /// 储备基础币的启动购入成本，已经包含在总投入内。
+    pub fee_reserve_usdt: f64,
 }

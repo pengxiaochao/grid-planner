@@ -14,6 +14,7 @@ xcrun swiftc -O -swift-version 6 -parse-as-library \
     -module-cache-path "$TEST_PROJECT_DIR/target/swift-module-cache" \
     "$TEST_PROJECT_DIR/desktop/macos/FormState.swift" \
     "$TEST_PROJECT_DIR/desktop/macos/Engine.swift" \
+    "$TEST_PROJECT_DIR/desktop/macos/MetricGuide.swift" \
     "$TEST_PROJECT_DIR/desktop/tests/BridgeE2E.swift" \
     -o "$TEST_PROJECT_DIR/target/desktop-tests/BridgeE2E"
 # Python 提供回环 HTTP 服务，再启动 Swift 验收；真实行情与账户密钥都不是验收前提。

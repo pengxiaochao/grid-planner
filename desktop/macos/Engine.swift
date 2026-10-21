@@ -55,6 +55,8 @@ struct PlanData: Decodable, Sendable {
     let worstNetGridPct: Double
     /// 计入总投入的手续费预留币购买成本，单位 USDT。
     let feeReserveUsdt: Double
+    /// 已包含在投入内的资金拆分，旧版结果缺失时为空。
+    let funding: FundingData?
     /// offline_inputs 或 binance_public_api，用于说明输入来源。
     let dataSource: String
     /// 所选周期 Wilder ATR 的 USDT 波幅；方案可为 nil，历史结果必须有值。
@@ -69,7 +71,10 @@ struct PlanData: Decodable, Sendable {
     let history: HistoryData?
 
     /// 输入：后端算法判定；返回：是否通过历史门槛、可以复制填写参数。
-    var isActionable: Bool { optimization?.recommendation != "wait" }
+    var isActionable: Bool { optimization?.recommendation != "wait" && riskWithinBudget }
+
+    /// 输入：两种损失和预算；返回：旧版或新版报告都必须通过的复制保护。
+    var riskWithinBudget: Bool { max(stressScenarioLossUsdt, stopScenarioLossUsdt) <= riskBudgetUsdt + 1e-8 }
 
     /// 输入：后端网格类型；返回：供界面和复制文本共用的中文名称。
     var gridModeTitle: String { mode == "arithmetic" ? "等差" : "等比" }
@@ -81,7 +86,10 @@ struct PlanData: Decodable, Sendable {
 
     /// 输入：方案；返回：方便抄到币安的中文文本，风险信息与关键参数一起保留。
     func copyText() -> String {
-        if !isActionable { return "建议观望：\(optimization?.reason ?? "证据不足")\n\(validationText())" }
+        if !isActionable {
+            let reason = riskWithinBudget ? (optimization?.reason ?? "证据不足") : "止损或压力损失超过账户风险预算"
+            return "建议观望：\(reason)\n\(validationText())"
+        }
         return """
         \(symbol) 现货\(gridModeTitle)网格
         参考现价：\(referencePrice) USDT
@@ -113,6 +121,10 @@ struct PlanData: Decodable, Sendable {
 struct OptimizationData: Decodable, Sendable {
     /// 仅用发展验证段选择的 ATR 区间倍数。
     let selectedRangeAtrMult: Double
+    /// 实际成交回放周期；旧报告未标注时使用原周期说明。
+    let executionInterval: String?
+    /// 各段仅用此前数据重新选参的滚动样本外结果。
+    let rollingValidation: [RollingData]?
     /// 实际历史可行的候选组合数。
     let feasibleCandidates: Int
     /// 实际搜索的区间/格数组合总数，用于区分最优格数和搜索上限。
@@ -135,6 +147,10 @@ struct OptimizationData: Decodable, Sendable {
 struct ValidationData: Decodable, Sendable {
     /// 实际验证根数。
     let evaluatedBars: Int
+    /// 实际成交回放根数，细周期时大于 ATR 根数。
+    let replayedBars: Int?
+    /// A 相对同额持有的净收益百分点。
+    let excessReturnPctPoints: Double?
     /// 最终检验首根 Unix 开盘毫秒。
     let evaluationStartOpenMs: UInt64
     /// 最终检验末根 Unix 开盘毫秒。
@@ -145,6 +161,48 @@ struct ValidationData: Decodable, Sendable {
     let baseline: EvaluationMetrics?
     /// 同额投入买入持有的本金收益。
     let buyHoldReturnPct: Double
+    /// 预声明趋势底仓实验；旧版导出缺少字段时仍可读取。
+    let abTest: ComparisonData?
+}
+
+/// 投入的三项互斥资金分配；手续费储备已包含在投入中。
+struct FundingData: Decodable, Sendable {
+    /// 初始网格库存购入成本，包含买入比例成本。
+    let initialGridPurchaseUsdt: Double
+    /// 下方买单预留 USDT。
+    let buyOrderCashUsdt: Double
+    /// 储备基础币购入成本，不是额外需付的现金。
+    let feeReserveUsdt: Double
+}
+
+/// 独立滚动样本外窗口；失败原因随结果导出，不记作零收益。
+struct RollingData: Decodable, Sendable {
+    /// 本窗口之前可用的训练根数。
+    let trainingBars: Int
+    /// 验证开始的 Unix 毫秒。
+    let evaluationStartOpenMs: UInt64
+    /// 成功时保存完整 A/B 与基准，失败时为空。
+    let evaluation: ValidationData?
+    /// 选参或资金不可行的实际原因。
+    let error: String?
+}
+
+/// 同一 A 组参数下的趋势底仓 B 组；只用于历史实验，不改变复制填写参数。
+struct ComparisonData: Decodable, Sendable {
+    /// 预先固定规则的版本名称。
+    let strategy: String
+    /// 仅由本段之前的历史确认的上涨信号。
+    let uptrendSignal: Bool
+    /// 不再参与网格买卖的初始卖格槽位数。
+    let coreSlots: Int
+    /// B 组趋势底仓网格的完整历史指标。
+    let b: EvaluationMetrics
+    /// 同额投入持有的指标，其止损与网格不同。
+    let buyHold: EvaluationMetrics
+    /// B 减 A 的收益百分点，可以为负。
+    let returnDeltaPctPoints: Double
+    /// B 相对同额持有的净收益百分点。
+    let excessReturnPctPoints: Double?
 }
 
 /// 回放结果；百分比按用户可投入本金计算，库存浮亏和成本已计入。

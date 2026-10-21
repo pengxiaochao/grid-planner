@@ -70,6 +70,10 @@ pub struct Settings {
     pub atr: Option<f64>,
     /// 可选的用户 OHLC CSV 路径，仅离线 ATR 模式使用；不自动加载演示文件。
     pub candles: Option<PathBuf>,
+    /// 可选细周期成交回放 CSV，须与 replay_interval 同时指定且完整覆盖原周期。
+    pub replay_candles: Option<PathBuf>,
+    /// 可选细周期成交回放周期，仅自适应；联网时自动分页获取。
+    pub replay_interval: Option<String>,
     /// 固定 K 线周期字符串，例如 1d；同时决定连续性及收盘边界。
     pub interval: String,
     /// 可选历史请求根数，最多 1000；必须大于 atr_period 才能计算 ATR。
@@ -96,7 +100,7 @@ pub struct Settings {
     pub up_pct: f64,
     /// 非 ATR 模式的区间外止损/停止价缓冲，填 3 表示 3%。
     pub outside_pct: f64,
-    /// 本策略止损情景占账户总资产的预算百分比；不保证实际亏损上限。
+    /// 正常止损与指定压力情景共用的账户预算百分比；不保证实际亏损上限。
     pub risk_pct: f64,
     /// 买入、卖出各自的手续费百分比；两边分别计算，不重复扣双边费率。
     pub fee_pct: f64,
@@ -147,6 +151,8 @@ impl Default for Settings {
             grid_mode: GridMode::Geometric,
             atr: None,
             candles: None,
+            replay_candles: None,
+            replay_interval: None,
             interval: "1d".into(),
             history_bars: None,
             atr_period: 14,
@@ -245,6 +251,12 @@ pub struct Cli {
     /// 已收盘 OHLC CSV，不能同时指定 atr 或 live
     #[arg(long)]
     pub candles: Option<PathBuf>,
+    /// 成交回放细周期 CSV；离线时与 replay-interval 同用
+    #[arg(long)]
+    pub replay_candles: Option<PathBuf>,
+    /// 成交回放细周期（例如 1h、15m），必须比 ATR 周期更细；联网自动分页获取
+    #[arg(long)]
+    pub replay_interval: Option<String>,
     /// K 线周期：1m/5m/15m/30m/1h/4h/1d/1w，默认 1d
     #[arg(long)]
     pub interval: Option<String>,
@@ -347,14 +359,15 @@ impl Cli {
                     .with_context(|| format!("无法读取配置 {}", path.display()))?;
             let mut parsed: Settings = // TOML 解析结果，拒绝拼错的未知字段。
                 toml::from_str(&content).context("TOML 配置错误（请检查字段拼写）")?;
-            if let Some(candles) = &parsed.candles {
-                // 配置中的 CSV 路径；相对路径以 TOML 所在目录解释。
-                if candles.is_relative() {
-                    parsed.candles = Some(
-                        path.parent()
-                            .unwrap_or(std::path::Path::new("."))
-                            .join(candles),
-                    );
+            for file in [&mut parsed.candles, &mut parsed.replay_candles]
+                .into_iter()
+                .flatten()
+            {
+                if file.is_relative() {
+                    *file = path
+                        .parent()
+                        .unwrap_or(std::path::Path::new("."))
+                        .join(&*file);
                 }
             }
             parsed
@@ -367,9 +380,7 @@ impl Cli {
 
     /// 输入：待覆盖的设置；返回：无；只复制用户明确提供的 CLI 参数。
     fn apply(&self, settings: &mut Settings) {
-        // 非 Option 目标字段只被显式 CLI 参数覆盖；value 是克隆后的用户输入。
         macro_rules! replace { ($($field:ident),*) => { $(if let Some(value) = &self.$field { settings.$field = value.clone(); })* }; }
-        // Option 目标字段保留 None/Some 语义，未填写时不覆盖 TOML 的可选值。
         macro_rules! optional { ($($field:ident),*) => { $(if let Some(value) = &self.$field { settings.$field = Some(value.clone()); })* }; }
         replace!(
             capital,
@@ -403,6 +414,8 @@ impl Cli {
             equity,
             atr,
             candles,
+            replay_candles,
+            replay_interval,
             lower,
             upper,
             stop_loss,
@@ -435,11 +448,41 @@ impl Settings {
         self.validate_rates()?;
         self.validate_mode(live)?;
         self.validate_algorithm(live)?;
+        self.validate_replay(live)?;
         self.validate_limits()?;
         ensure!(
             live || self.history_bars.is_none(),
             "history-bars 需要 --live 或 --fetch-history"
         );
+        Ok(())
+    }
+
+    /// 输入：回放设置与联网标记；返回：细周期来源和周期兼容性确认，拒绝静默回退。
+    fn validate_replay(&self, live: bool) -> Result<()> {
+        ensure!(
+            self.replay_candles.is_none() || self.replay_interval.is_some(),
+            "细周期回放 CSV 必须指定 replay-interval"
+        );
+        if let Some(interval) = &self.replay_interval {
+            ensure!(
+                self.algorithm == Algorithm::Adaptive,
+                "细周期回放仅用于 adaptive"
+            );
+            let fine = interval_ms(interval)?;
+            let coarse = interval_ms(&self.interval)?;
+            ensure!(
+                fine < coarse && coarse % fine == 0,
+                "回放周期必须更细且整除 ATR 周期"
+            );
+            ensure!(
+                live || self.replay_candles.is_some(),
+                "离线回放必须指定 replay-candles"
+            );
+            ensure!(
+                !live || self.replay_candles.is_none(),
+                "联网回放不能混用本地 replay-candles"
+            );
+        }
         Ok(())
     }
 
@@ -466,6 +509,10 @@ impl Settings {
 
     /// 输入：历史行情设置；返回：联网输入校验结果，不要求本金、现价或手动区间。
     pub fn validate_history(&self) -> Result<()> {
+        ensure!(
+            self.replay_interval.is_none() && self.replay_candles.is_none(),
+            "独立历史获取不接受成交回放参数，请使用 adaptive 生成方案"
+        );
         self.validate_market()?;
         ensure!(
             self.atr.is_none() && self.candles.is_none(),

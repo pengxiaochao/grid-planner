@@ -11,7 +11,9 @@ use std::time::Duration;
 /// 输入：设置、联网标记与 API 地址；返回：带数据来源的价格、波动率和过滤器。
 pub fn load(settings: &Settings, live: bool, base_url: &str) -> Result<Market> {
     if live {
-        return load_live(settings, base_url);
+        let mut market = load_live(settings, base_url)?;
+        attach_execution(settings, &mut market, base_url, true)?;
+        return Ok(market);
     }
     // 尚可补充 ATR/历史的本次行情快照；不混用之前请求结果。
     let mut market = Market {
@@ -23,6 +25,7 @@ pub fn load(settings: &Settings, live: bool, base_url: &str) -> Result<Market> {
         closed_candle_count: 0,
         last_candle_open_ms: None,
         market_as_of_ms: None,
+        execution: None,
         history: None,
         candles: Vec::new(),
     };
@@ -42,6 +45,7 @@ pub fn load(settings: &Settings, live: bool, base_url: &str) -> Result<Market> {
         );
         attach_atr(&mut market, &candles, settings, "csv_wilder_atr")?;
     }
+    attach_execution(settings, &mut market, base_url, false)?;
     Ok(market)
 }
 
@@ -70,6 +74,7 @@ fn load_live(settings: &Settings, base_url: &str) -> Result<Market> {
         closed_candle_count: 0,
         last_candle_open_ms: None,
         market_as_of_ms: Some(now),
+        execution: None,
         history: None,
         candles: Vec::new(),
     };
@@ -310,4 +315,73 @@ fn attach_atr(
     market.atr_source = Some(source.into());
     market.candles = candles.to_vec();
     Ok(())
+}
+
+/// 输入：设置、已读取原周期快照、API 地址和联网标记；返回：无；细周期失败不回退粗周期。
+fn attach_execution(s: &Settings, market: &mut Market, base: &str, live: bool) -> Result<()> {
+    if s.replay_interval.is_none() {
+        return Ok(());
+    }
+    let (candles, source) = if live {
+        let client = build_client(s)?;
+        (
+            request_execution(&client, base, s, market)?,
+            format!("{}/api/v3/klines", base.trim_end_matches('/')),
+        )
+    } else {
+        let path = s.replay_candles.as_ref().context("细周期回放缺少 CSV")?;
+        (
+            read_csv(path).context("细周期回放 CSV 无效")?,
+            path.display().to_string(),
+        )
+    };
+    market.execution = Some(crate::execution::validate(
+        s,
+        &market.candles,
+        candles,
+        source,
+    )?);
+    Ok(())
+}
+
+/// 输入：客户端、API 地址、设置和原周期历史；返回：按时间分页取齐的真实细周期，不接受缺页或越界数据。
+fn request_execution(
+    client: &Client,
+    base: &str,
+    s: &Settings,
+    market: &Market,
+) -> Result<Vec<Candle>> {
+    let interval = s.replay_interval.as_ref().context("缺少回放周期")?;
+    let step = interval_ms(interval)?;
+    let mut cursor = market
+        .candles
+        .first()
+        .context("细周期回放缺少原周期历史")?
+        .open_time;
+    let end = market.candles.last().unwrap().open_time + interval_ms(&s.interval)?;
+    ensure!(
+        (end - cursor) / step <= 100_000,
+        "细周期回放最多 100000 根，请缩短历史或使用较粗成交周期"
+    );
+    let now = market.market_as_of_ms.context("回放缺少服务器时间")?;
+    let mut candles = Vec::new();
+    while cursor < end {
+        let params = [
+            ("symbol", s.symbol.clone()),
+            ("interval", interval.clone()),
+            ("limit", "1000".into()),
+            ("startTime", cursor.to_string()),
+            ("endTime", (end - 1).to_string()),
+        ];
+        let value = get_json(client, base, "klines", &params)?;
+        let page = closed_klines(&value, now, interval).context("细周期回放分页无效")?;
+        ensure!(!page.is_empty(), "细周期回放分页缺失，开盘毫秒 {cursor}");
+        ensure!(
+            page[0].open_time == cursor && page.last().unwrap().open_time < end,
+            "细周期回放分页重复、缺失或越界"
+        );
+        cursor = page.last().unwrap().open_time + step;
+        candles.extend(page);
+    }
+    Ok(candles)
 }

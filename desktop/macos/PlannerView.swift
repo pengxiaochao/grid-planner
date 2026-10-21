@@ -7,6 +7,8 @@ import SwiftUI
 /// 参数窗口的整体布局：左侧输入、右侧结果、底部生成/取消/复制/导出操作。
 @MainActor
 struct PlannerView: View {
+    /// 当前窗口独立的指标说明状态，不与交易或表单状态混用。
+    @StateObject private var metricHelp = MetricHelpPresenter()
     /// 共享的主线程状态；ObservedObject 在表单或结果变化时刷新视图。
     @ObservedObject var model: PlannerModel
     /// 输入：当前共享模型/卡片属性；返回：SwiftUI 主布局，不发起隐式请求。
@@ -24,6 +26,10 @@ struct PlannerView: View {
         }
         .background(Color(nsColor: .windowBackgroundColor))
         .tint(.blue)
+        .environmentObject(metricHelp)
+        .overlay(alignment: .bottomTrailing) {
+            MetricHelpToast(presenter: metricHelp).padding(.bottom, 58)
+        }
     }
 
     /// 输入：模型操作状态；返回：标题、说明入口及恢复默认按钮。
@@ -100,7 +106,7 @@ struct FormPane: View {
             Text("最多投入 ≠ 必须全部投入。风险预算不足时会自动缩小金额。")
                 .font(.caption).foregroundStyle(.secondary)
             Divider()
-            Toggle("自动读取币安行情和交易规则", isOn: $model.form.live)
+            Toggle(isOn: $model.form.live) { MetricHelpLabel(title: "自动读取币安行情和交易规则") }
             if !model.form.live { rows([.price]) }
         }.padding(8)
     }
@@ -109,14 +115,16 @@ struct FormPane: View {
     private var strategy: some View {
         VStack(alignment: .leading, spacing: 11) {
             gridSettings
-            Picker("选参算法", selection: binding(.algorithm)) {
+            Picker(selection: binding(.algorithm)) {
                 Text("自适应 · 历史验证").tag("adaptive")
                 Text("经典 · 最多可行格数").tag("classic")
-            }.accessibilityIdentifier("algorithm")
+            } label: { MetricHelpLabel(title: "选参算法", key: "input.algorithm") }
+            .accessibilityIdentifier("algorithm")
             Text(model.form.value(.algorithm) == "adaptive"
                  ? "自适应需要联网 ATR 历史、至少 120 根。程序比较区间宽度和格数；证据不足会建议观望，SL/TP 请使用 ATR 倍数。"
                  : "经典算法按资金和风险约束选择最多格数，支持手动输入。")
                 .font(.caption).foregroundStyle(.secondary)
+            MetricHelpLabel(title: "区间计算方式", key: "区间模型").font(.caption).foregroundStyle(.secondary)
             Picker("区间模型", selection: $model.form.range) {
                 ForEach(RangeChoice.allCases, id: \.self) { Text($0.title).tag($0) }
             }.pickerStyle(.segmented).labelsHidden()
@@ -144,10 +152,11 @@ struct FormPane: View {
     /// 输入：网格类型与格数草稿；返回：始终可见的类型、搜索上限和固定值选项。
     private var gridSettings: some View {
         VStack(alignment: .leading, spacing: 11) {
-            Picker("网格类型", selection: binding(.gridMode)) {
+            Picker(selection: binding(.gridMode)) {
                 Text("等比 · 相同比例").tag("geometric")
                 Text("等差 · 相同价差").tag("arithmetic")
-            }.accessibilityIdentifier("grid-mode")
+            } label: { MetricHelpLabel(title: "网格类型", key: "input.grid-mode") }
+            .accessibilityIdentifier("grid-mode")
             rows([.maxGrids, .grids])
             Text("固定格数留空时自动选择；自适应按历史评分选优，经典选最多可行格数。更多格会缩小价差并分散每格资金，不保证收益更高。")
                 .font(.caption).foregroundStyle(.secondary)
@@ -159,6 +168,15 @@ struct FormPane: View {
         VStack(alignment: .leading, spacing: 11) {
             intervalPicker
             rows([.historyBars, .atrPeriod])
+            if model.form.value(.algorithm) == "adaptive" {
+                Picker(selection: binding(.replayInterval)) {
+                    Text("原周期 · OHLC 情景").tag("")
+                    Text("1h · 真实小时线").tag("1h")
+                    Text("15m · 真实 15 分钟线").tag("15m")
+                } label: { MetricHelpLabel(title: "成交回放周期", key: "input.replay-interval") }
+                Text("细周期必须小于 ATR 周期；自动分页读取完整历史，缺失时停止。建议增加历史根数并检查滚动样本外结果。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Button(action: model.fetchHistory) {
                 Label("获取历史行情", systemImage: "arrow.down.circle")
             }.accessibilityIdentifier("fetch-history")
@@ -171,19 +189,19 @@ struct FormPane: View {
 
     /// 输入：interval 草稿；返回：与后端支持范围一致的固定周期选择器。
     private var intervalPicker: some View {
-        Picker("K 线周期", selection: binding(.interval)) {
+        Picker(selection: binding(.interval)) {
             ForEach(["1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"], id: \.self) { Text($0).tag($0) }
-        }
+        } label: { MetricHelpLabel(title: "K 线周期", key: "input.interval") }
     }
 
     /// 输入：代理开关/协议；返回：协议、主机与端口输入区。
     private var proxy: some View {
         VStack(alignment: .leading, spacing: 11) {
-            Toggle("使用指定代理", isOn: $model.form.useProxy)
+            Toggle(isOn: $model.form.useProxy) { MetricHelpLabel(title: "使用指定代理") }
             if model.form.useProxy {
-                Picker("协议", selection: $model.form.proxy) {
+                Picker(selection: $model.form.proxy) {
                     ForEach(ProxyChoice.allCases, id: \.self) { Text($0.title).tag($0) }
-                }
+                } label: { MetricHelpLabel(title: "协议", key: "代理协议") }
                 rows([.proxyHost, .proxyPort])
             }
             Text("代理只用于本应用的联网行情请求。地址与端口以你的代理软件为准。")
@@ -206,7 +224,8 @@ struct FormPane: View {
     private func rows(_ fields: [FieldID]) -> some View {
         ForEach(fields, id: \.self) { field in // 当前字段规格决定标题、占位符、绑定及无障碍标识。
             HStack(spacing: 8) {
-                Text(field.spec.title).font(.system(size: 12)).frame(width: 135, alignment: .leading)
+                MetricHelpLabel(title: field.spec.title, key: "input." + field.rawValue)
+                    .font(.system(size: 12)).frame(width: 135, alignment: .leading)
                 TextField(field.spec.placeholder, text: binding(field))
                     .textFieldStyle(.roundedBorder).font(.system(size: 12, design: .monospaced))
                     .accessibilityLabel(field.spec.title).accessibilityIdentifier(field.rawValue)
@@ -261,7 +280,7 @@ struct ResultPane: View {
     private func historicalReport(_ h: HistoryData) -> some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 12) {
-                Text("\(h.candleInterval) · \(h.closedCandleCount) 根已收盘 K 线 · 收盘价走势")
+                MetricHelpLabel(title: "\(h.candleInterval) · \(h.closedCandleCount) 根已收盘 K 线 · 收盘价走势", key: "历史行情")
                     .font(.caption).foregroundStyle(.secondary)
                 Chart(h.candles) { candle in // 每个点直接取真实样本的开盘时间与收盘价。
                     LineMark(x: .value("时间", candle.date), y: .value("收盘价", candle.close))
@@ -306,7 +325,10 @@ struct ResultPane: View {
                 Spacer()
                 Text("现货 · \(p.gridModeTitle)").font(.caption).foregroundStyle(.secondary)
             }
-            Text("参考现价 \(p.referencePrice) USDT").font(.caption).foregroundStyle(.secondary)
+            HStack {
+                MetricHelpLabel(title: "参考现价")
+                Text("\(p.referencePrice) USDT")
+            }.font(.caption).foregroundStyle(.secondary)
             if let audit = p.optimization { optimization(audit) }
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                 ValueCard(title: "区间下限", value: p.lowerPrice, tint: .blue)
@@ -346,10 +368,14 @@ struct ResultPane: View {
                 metric("单边下跌止损亏损", "\(money(p.stopScenarioLossUsdt)) USDT")
                 metric("跌穿止损压力亏损", "\(money(p.stressScenarioLossUsdt)) USDT")
                 metric("最差一格净收益", "\(String(format: "%.3f", p.worstNetGridPct))%")
-                metric("手续费预留", "\(money(p.feeReserveUsdt)) USDT")
+                metric("储备币购入成本（已含投入）", "\(money(p.feeReserveUsdt)) USDT")
+                if let funding = p.funding {
+                    metric("初始网格购币（已含买费）", "\(money(funding.initialGridPurchaseUsdt)) USDT")
+                    metric("下方买单预留现金", "\(money(funding.buyOrderCashUsdt)) USDT")
+                }
                 if let atr = p.atr { metric("ATR · \(p.candleInterval)", money(atr)) } // 只有计算了 ATR 才展示。
                 metric("数据来源", p.dataSource == "binance_public_api" ? "币安公开行情" : "手动填写")
-                Text("以完整成交及假设成本计算，实际亏损可能超过预算。创建前核对币安预览。")
+                Text("正常 SL 与指定压力情景均须满足预算；储备币成本已含投入。更大跳空或流动性不足仍可能超出模型预算。")
                     .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
             }.padding(8)
         }
@@ -361,19 +387,24 @@ struct ResultPane: View {
             VStack(alignment: .leading, spacing: 10) {
                 metric("区间 ATR 倍数", money(report.selectedRangeAtrMult))
                 metric("可行 / 搜索组合", "\(report.feasibleCandidates) / \(report.testedCandidates)")
-                metric("发展验证 / 风险调整评分", "\(report.developmentFolds.count) 段 / \(money(report.developmentScore))")
+                metric("发展验证（参与选参）/ 评分", "\(report.developmentFolds.count) 段 / \(money(report.developmentScore))")
+                metric("成交回放周期", report.executionInterval ?? "原周期 OHLC 情景")
                 metric("最终检验", "\(report.holdout.evaluatedBars) 根（未参与选参）")
-                Text("\(timestamp(report.holdout.evaluationStartOpenMs)) — \(timestamp(report.holdout.evaluationEndOpenMs))")
+                MetricHelpLabel(title: "\(timestamp(report.holdout.evaluationStartOpenMs)) — \(timestamp(report.holdout.evaluationEndOpenMs))", key: "检验时间")
                     .font(.caption).foregroundStyle(.secondary)
                 metric("最终检验本金净收益", "\(money(report.holdout.candidate.netReturnPct))%")
                 metric("最大权益回撤", "\(money(report.holdout.candidate.maxDrawdownPct))%")
                 metric("双倍成本本金净收益", "\(money(report.holdout.candidate.stressNetReturnPct))%")
+                if let excess = report.holdout.excessReturnPctPoints { metric("A − 买入持有", "\(money(excess)) 个百分点") }
+                metric("实际成交回放 K 线", "\(report.holdout.replayedBars ?? report.holdout.evaluatedBars) 根")
                 metric("完成网格卖出", "\(report.holdout.candidate.completedCycles) 次")
                 if let baseline = report.holdout.baseline {
                     metric("经典算法同段净收益", "\(money(baseline.netReturnPct))%")
                 }
                 metric("同额投入买入持有", "\(money(report.holdout.buyHoldReturnPct))%")
-                Text(report.reason).font(.caption)
+                if let ab = report.holdout.abTest { comparison(ab, a: report.holdout.candidate) }
+                if let windows = report.rollingValidation { rollingValidation(windows) }
+                MetricHelpLabel(title: report.reason, key: "观望原因").font(.caption)
                     .foregroundStyle(report.recommendation == "wait" ? .orange : .secondary)
                 Text("历史检验不能保证未来收益。买入持有的风险敞口与网格不同。")
                     .font(.caption).foregroundStyle(.secondary)
@@ -381,10 +412,57 @@ struct ResultPane: View {
         }
     }
 
+    /// 输入：同段实验与 A 指标；返回：B 收益、回撤和成本压力对照，实验不会替换 A 参数。
+    private func comparison(_ ab: ComparisonData, a: EvaluationMetrics) -> some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    MetricHelpLabel(title: "B 如何激活？").font(.caption)
+                    Spacer()
+                    MetricHelpLabel(title: "趋势底仓").font(.caption)
+                }
+                metric("B 段前趋势 / 底仓格", "\(ab.uptrendSignal ? "上涨" : "未激活") / \(ab.coreSlots)")
+                metric("A 原网格净收益", "\(money(a.netReturnPct))%")
+                metric("B 趋势底仓净收益", "\(money(ab.b.netReturnPct))%")
+                if let excess = ab.excessReturnPctPoints { metric("B − 买入持有", "\(money(excess)) 个百分点") }
+                metric("B − A 收益差", "\(money(ab.returnDeltaPctPoints)) 个百分点")
+                metric("A / B 最大回撤", "\(money(a.maxDrawdownPct))% / \(money(ab.b.maxDrawdownPct))%")
+                metric("A / B 双倍成本收益", "\(money(a.stressNetReturnPct))% / \(money(ab.b.stressNetReturnPct))%")
+                metric("买入持有最大回撤", "\(money(ab.buyHold.maxDrawdownPct))%")
+                metric("买入持有双倍成本收益", "\(money(ab.buyHold.stressNetReturnPct))%")
+                Text("B 仅保留初始卖格的半数为底仓，共用 A 的投入与 SL/TP。无上涨信号时退回 A。底仓可能加大回撤；买入持有不设网格止损。")
+                    .font(.caption).foregroundStyle(.secondary)
+                Text("实验结果不会自动切换策略。下方填写和复制仍为 A；B 需要独立管理底仓，不能直接照填币安静态网格。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }.padding(4)
+        } label: { MetricHelpLabel(title: "A/B 实验 · 趋势底仓网格", key: "A/B 实验") }
+    }
+
+    /// 输入：独立滚动窗口；返回：每个窗口的收益/回撤及失败原因，不把独立段拼成复利曲线。
+    private func rollingValidation(_ windows: [RollingData]) -> some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 8) {
+                if windows.isEmpty { Text("历史不足；增加根数后再检查滚动样本外表现。") }
+                ForEach(windows.indices, id: \.self) { i in
+                    let window = windows[i]
+                    MetricHelpLabel(title: "窗口 \(i + 1) · 训练 \(window.trainingBars) 根 · \(timestamp(window.evaluationStartOpenMs))", key: "滚动窗口")
+                        .font(.caption).foregroundStyle(.secondary)
+                    if let f = window.evaluation {
+                        metric("A / B 净收益", "\(money(f.candidate.netReturnPct))% / \(money(f.abTest?.b.netReturnPct ?? f.candidate.netReturnPct))%")
+                        metric("A 最大回撤", "\(money(f.candidate.maxDrawdownPct))%")
+                        metric("A − 买入持有", "\(money(f.excessReturnPctPoints ?? 0)) 个百分点")
+                    } else { MetricHelpLabel(title: window.error ?? "无可行候选", key: "无可行历史候选").font(.caption).foregroundStyle(.orange) }
+                }
+                Text("每段按相同预算独立建仓。发展评分参与选参，不能当作样本外评分；历史窗口不保证覆盖未来行情。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }.padding(4)
+        } label: { MetricHelpLabel(title: "滚动样本外检验 · 每段独立重新选参", key: "滚动样本外检验") }
+    }
+
     /// 输入：标签与数值；返回：可选择复制、两端对齐的摘要行。
     private func metric(_ title: String, _ value: String) -> some View {
         HStack(alignment: .firstTextBaseline) {
-            Text(title).font(.system(size: 12)).foregroundStyle(.secondary)
+            MetricHelpLabel(title: title).font(.system(size: 12)).foregroundStyle(.secondary)
             Spacer(minLength: 10)
             Text(value).font(.system(size: 12, weight: .medium, design: .monospaced)).multilineTextAlignment(.trailing)
         }
@@ -402,7 +480,7 @@ struct ValueCard: View {
     /// 输入：当前共享模型/卡片属性；返回：SwiftUI 主布局，不发起隐式请求。
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text(title).font(.caption).foregroundStyle(.secondary)
+            MetricHelpLabel(title: title).font(.caption).foregroundStyle(.secondary)
             Text(value).font(.system(size: 18, weight: .semibold, design: .monospaced))
                 .foregroundStyle(tint).lineLimit(1).minimumScaleFactor(0.65)
             Text("USDT").font(.system(size: 10)).foregroundStyle(.secondary)
